@@ -1,0 +1,158 @@
+import { Document, Page, StyleSheet, Text, View, renderToBuffer } from '@react-pdf/renderer'
+import React from 'react'
+
+import type { CalculationResult, InputPayload } from '@/lib/engine/types'
+
+const s = StyleSheet.create({
+  page: { padding: 36, fontSize: 9, fontFamily: 'Helvetica', color: '#1a2230' },
+  h1: { fontSize: 18, marginBottom: 2, fontFamily: 'Helvetica-Bold' },
+  sub: { fontSize: 9, color: '#5a6678', marginBottom: 14 },
+  section: { fontSize: 12, marginTop: 16, marginBottom: 6, fontFamily: 'Helvetica-Bold' },
+  hero: { backgroundColor: '#0b3d2e', color: '#ffffff', padding: 14, borderRadius: 4, marginBottom: 8 },
+  heroLabel: { fontSize: 9, color: '#bfe3d2' },
+  heroValue: { fontSize: 24, fontFamily: 'Helvetica-Bold', marginTop: 2 },
+  row: { flexDirection: 'row', borderBottomWidth: 0.5, borderBottomColor: '#dde3ea', paddingVertical: 3 },
+  cellL: { flex: 3 },
+  cellR: { flex: 1, textAlign: 'right' },
+  bold: { fontFamily: 'Helvetica-Bold' },
+  warn: { color: '#9a6700' },
+  err: { color: '#b3261e' },
+  note: { fontSize: 8, color: '#5a6678', marginTop: 4 },
+  foot: { position: 'absolute', bottom: 22, left: 36, right: 36, fontSize: 7, color: '#9aa4b2', textAlign: 'center' },
+})
+
+const n = (v: number | null | undefined, dp = 2) =>
+  v === null || v === undefined ? 'n/a' : v.toLocaleString('en-IN', { maximumFractionDigits: dp })
+
+function Line({ label, value, unit, bold }: { label: string; value: string; unit?: string; bold?: boolean }) {
+  return (
+    <View style={s.row}>
+      <Text style={[s.cellL, bold ? s.bold : {}]}>{label}</Text>
+      <Text style={[s.cellR, bold ? s.bold : {}]}>
+        {value}
+        {unit ? ` ${unit}` : ''}
+      </Text>
+    </View>
+  )
+}
+
+function ReportDoc({ payload, result }: { payload: InputPayload; result: CalculationResult }) {
+  const c = result.scope1.components
+  return (
+    <Document>
+      <Page size="A4" style={s.page}>
+        <Text style={s.h1}>Scope 1 GHG Inventory — Cement</Text>
+        <Text style={s.sub}>
+          {payload.organization.name} · {payload.facility.name} · FY {result.reportingPeriod.year} ·{' '}
+          {result.methodologyPack} · GWP {payload.calculationContext.gwpSet}
+        </Text>
+
+        <View style={s.hero}>
+          <Text style={s.heroLabel}>Gross Scope 1 direct emissions</Text>
+          <Text style={s.heroValue}>{n(result.scope1.grossScope1CO2Tonnes)} tCO2e</Text>
+          <Text style={s.heroLabel}>Status: {result.status} · Data quality: {result.dataQuality.overall}</Text>
+        </View>
+
+        <Text style={s.section}>Scope 1 breakdown</Text>
+        <Line label="Clinker calcination" value={n(c.clinkerCalcinationCO2Tonnes)} unit="tCO2" />
+        <Line label="Bypass dust" value={n(c.bypassDustCO2Tonnes)} unit="tCO2" />
+        <Line label="Cement kiln dust (CKD)" value={n(c.ckdCO2Tonnes)} unit="tCO2" />
+        <Line label="Raw meal TOC" value={n(c.rawMealTocCO2Tonnes)} unit="tCO2" />
+        <Line label="Conventional kiln fuel" value={n(c.conventionalKilnFuelCO2Tonnes)} unit="tCO2" />
+        <Line label="Alternative fossil kiln fuel" value={n(c.alternativeFossilKilnFuelCO2Tonnes)} unit="tCO2" />
+        <Line label="Non-kiln fossil fuel" value={n(c.nonKilnFossilCO2Tonnes)} unit="tCO2" />
+        <Line label="Mobile combustion (owned/controlled)" value={n(c.mobileCombustionCO2Tonnes)} unit="tCO2" />
+        <Line label="Fugitive emissions (refrigerants / SF6)" value={n(c.fugitiveCO2eTonnes)} unit="tCO2e" />
+        <Line label="Gross Scope 1 total" value={n(result.scope1.grossScope1CO2Tonnes)} unit="tCO2e" bold />
+
+        <Text style={s.section}>Separated buckets (never merged into Scope 1)</Text>
+        <Line label="Biomass CO2 (memo item)" value={n(result.memoItems.biomassCO2Tonnes)} unit="tCO2" />
+        <Line
+          label="Combustion CH4/N2O (non-CSI addendum)"
+          value={n(result.nonCsiCombustionGhg.ch4N2oCO2eTonnes)}
+          unit="tCO2e"
+        />
+        <Line
+          label="Supporting Scope 2 — purchased electricity"
+          value={n(result.supportingScope2.purchasedElectricityCO2Tonnes)}
+          unit="tCO2"
+        />
+        <Line
+          label="Supporting Scope 3 — bought clinker"
+          value={n(result.supportingScope3.boughtClinkerCO2Tonnes)}
+          unit="tCO2"
+        />
+        <Line
+          label={`Optional net CO2 (${result.optionalNetReporting.method})`}
+          value={n(result.optionalNetReporting.netCO2Tonnes)}
+          unit="tCO2"
+        />
+        <Text style={s.note}>{result.nonCsiCombustionGhg.note}</Text>
+
+        <Text style={s.section}>Intensity</Text>
+        <Line
+          label="Gross CO2 per tonne clinker"
+          value={n(result.intensityMetrics.grossCO2PerTonneClinker, 1)}
+          unit="kgCO2/t"
+        />
+        <Line
+          label="Gross CO2 per tonne cementitious"
+          value={n(result.intensityMetrics.grossCO2PerTonneCementitious, 1)}
+          unit="kgCO2/t"
+        />
+
+        <Text style={s.foot} fixed>
+          Generated by Sustally Scope 1 Calculator · CSI Cement CO2 Protocol methodology · Audit-grade factor
+          snapshots and full calculation trace available in the Excel export.
+        </Text>
+      </Page>
+
+      <Page size="A4" style={s.page}>
+        <Text style={s.section}>Factor snapshots (provenance)</Text>
+        {result.factorSnapshots.map((f, i) => (
+          <Line
+            key={i}
+            label={`${f.factorName} [${f.source} ${f.sourceVersion}]${f.overridden ? ' (OVERRIDDEN)' : ''}`}
+            value={`${n(f.value, 4)}`}
+            unit={f.unit}
+          />
+        ))}
+
+        <Text style={s.section}>Validation</Text>
+        {result.errors.length === 0 && result.warnings.length === 0 && (
+          <Text>No warnings or errors. All inputs validated.</Text>
+        )}
+        {result.errors.map((e, i) => (
+          <Text key={`e${i}`} style={s.err}>
+            ERROR · {e.code} — {e.message}
+          </Text>
+        ))}
+        {result.warnings.map((w, i) => (
+          <Text key={`w${i}`} style={s.warn}>
+            WARNING · {w.code} — {w.message}
+          </Text>
+        ))}
+
+        <Text style={s.section}>Calculation trace</Text>
+        {result.calculationTrace.map((t, i) => (
+          <View key={i} style={{ marginBottom: 4 }}>
+            <Text style={s.bold}>
+              {t.step} — {n(t.outputTonnesCO2)} tCO2 {t.fallbackApplied ? `(fallback: ${t.fallbackApplied})` : ''}
+            </Text>
+            <Text style={s.note}>
+              {t.formula} · inputs {JSON.stringify(t.inputs)}
+            </Text>
+          </View>
+        ))}
+
+        <Text style={s.foot} fixed>
+          Sustally Scope 1 Calculator · {new Date().toISOString().slice(0, 10)}
+        </Text>
+      </Page>
+    </Document>
+  )
+}
+
+export async function buildPdf(payload: InputPayload, result: CalculationResult): Promise<Buffer> {
+  return renderToBuffer(<ReportDoc payload={payload} result={result} />)
+}

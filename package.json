@@ -1,0 +1,41 @@
+{
+  "name": "sustally-scope1-calculator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "payload": "payload",
+    "generate:types": "payload generate:types",
+    "seed": "tsx src/seed/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@payloadcms/db-sqlite": "^3.84.1",
+    "@payloadcms/next": "latest",
+    "@payloadcms/richtext-lexical": "latest",
+    "@react-pdf/renderer": "^4.5.1",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "lucide-react": "latest",
+    "next": "latest",
+    "payload": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "sharp": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "tsx": "^4.22.1",
+    "typescript": "latest",
+    "vitest": "^4.1.6"
+  }
+}

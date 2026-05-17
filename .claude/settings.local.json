@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls node_modules/payload)",
+      "Bash(cat .env.example)",
+      "Bash(which psql *)",
+      "Bash(ls node_modules/@payloadcms)",
+      "Bash(npm install *)",
+      "Bash(npm uninstall *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/@payloadcms/db-sqlite/package.json'\\).version\\)\")",
+      "Bash(node -e 'console.log\\('\\\\''__TRACKED_VAR__'\\\\'', require\\('\\\\''./node_modules/__TRACKED_VAR__/package.json'\\\\''\\).version\\)')",
+      "Bash(npx vitest *)",
+      "Bash(rm -f src/components/scope1-calculator.tsx src/lib/calculations/scope1.ts src/lib/reference/scope1-factors.ts)",
+      "Bash(rmdir src/lib/calculations src/lib/reference)",
+      "Bash(npx tsc *)",
+      "Bash(rm -rf .next)",
+      "Bash(timeout 480 npx next build)",
+      "Bash(npx next *)",
+      "Bash(npm run *)",
+      "Bash(echo \"SEED_EXIT=$?\")",
+      "Read(//tmp/**)",
+      "Bash(pkill -f \"next start -p 3210\")",
+      "Bash(pkill -f \"next-server\")",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill -9)",
+      "Bash(curl -s -o /dev/null -w \"port3000=%{http_code}\\\\n\" localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"port3001=%{http_code}\\\\n\" localhost:3001/)"
+    ]
+  }
+}
