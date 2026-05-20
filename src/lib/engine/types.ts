@@ -60,6 +60,12 @@ export interface OrganizationInput {
   cin?: string | null
   pan?: string | null
   country: string
+  /** Contact person preparing the inventory. */
+  contactName?: string
+  /** Contact email - required by the UI for follow-up but not enforced by the engine. */
+  contactEmail?: string
+  contactPhone?: string
+  contactRole?: string
 }
 
 export interface FacilityInput {
@@ -164,6 +170,8 @@ export interface FugitiveEntry {
   leakedKg: Quantity
   /** Override the library GWP for this gas (e.g. supplier blend GWP). */
   gwpOverride?: Quantity
+  /** Reason when gwpOverride is provided (recorded in factor snapshot). */
+  overrideReason?: string
   /** Free-text reference to an evidence file. */
   evidenceReference?: string
 }
@@ -294,6 +302,7 @@ export interface CalculationResult {
       biomassCO2MemoTonnes: number
       purchasedElectricityCO2Tonnes: number
       boughtClinkerCO2Tonnes: number
+      thirdPartyMobileCO2Tonnes: number
       emissionRightsTonnes: number
     }
   }
@@ -311,6 +320,7 @@ export interface CalculationResult {
   }
   supportingScope3: {
     boughtClinkerCO2Tonnes: number
+    thirdPartyMobileCO2Tonnes: number
   }
   optionalNetReporting: {
     method: NetReportingMethod

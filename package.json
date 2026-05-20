@@ -12,7 +12,7 @@
     "seed": "tsx src/seed/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "next lint"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@payloadcms/db-sqlite": "^3.84.1",

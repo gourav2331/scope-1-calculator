@@ -59,6 +59,13 @@ export function calculateSupporting(
           'activityData.boughtClinker',
         )
       }
+      if (net < 0) {
+        ctx.warn(
+          'net_clinker_purchases_negative',
+          `Sold clinker (${orDefault(sold, 0)} t) exceeds bought clinker (${orDefault(bought, 0)} t). Net purchases are negative - report readers may flag this; confirm intentional or split into bought-only and sold-only lines.`,
+          'activityData.boughtClinker',
+        )
+      }
       const ef = ctx.resolver.constant('BOUGHT_CLINKER_EF') // kgCO2/t
       boughtClinkerCO2 = (net * ef) / 1000
       ctx.addTrace({

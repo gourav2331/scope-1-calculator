@@ -6,10 +6,9 @@
  * non-CSI addendum (the CSI protocol itself is CO2-only).
  */
 
-import { FUEL_DEFAULTS } from './constants'
+import { FUEL_DEFAULTS, GWP } from './constants'
 import type { EngineContext } from './context'
 import type { FuelCombustionMethod, FuelEntry } from './types'
-import { GWP } from './constants'
 import { isMissing, isPresent, orDefault, round } from './util'
 
 export interface FuelOutcome {
@@ -33,6 +32,7 @@ function recordFuelFactorSnapshot(
   fuelCode: string,
   efKgPerGj: number,
   overridden: boolean,
+  overrideReason?: string,
 ): void {
   const def = FUEL_DEFAULTS[fuelCode]
   ctx.resolver.record({
@@ -46,7 +46,21 @@ function recordFuelFactorSnapshot(
     priorityRank: overridden ? 6 : 5,
     isDefault: !overridden,
     overridden,
+    overrideReason: overridden ? overrideReason : undefined,
   })
+}
+
+/** True if the entry has any LHV/EF/biomass/direct/carbon override vs library. */
+function hasAnyOverride(entry: FuelEntry): boolean {
+  return (
+    isPresent(entry.lhvGjPerUnit) ||
+    isPresent(entry.co2EfKgPerGj) ||
+    isPresent(entry.ch4EfKgPerGj) ||
+    isPresent(entry.n2oEfKgPerGj) ||
+    isPresent(entry.biomassFraction) ||
+    isPresent(entry.carbonContentFraction) ||
+    isPresent(entry.directCo2Tonnes)
+  )
 }
 
 /** Compute CO2 (and CH4/N2O CO2e) for one fuel entry, applying fallbacks. */
@@ -58,10 +72,86 @@ export function calculateFuel(
 ): FuelOutcome {
   const def = FUEL_DEFAULTS[entry.fuelCode]
   const category = entry.category ?? def?.category ?? 'CONVENTIONAL_FOSSIL'
+  const fieldBase = `fuel.${entry.id}`
+  const zero: FuelOutcome = { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+
+  // --- structural negative-value guards ----------------------------------
+  const numericFields: { val: unknown; field: string; min?: number; max?: number; label: string }[] = [
+    { val: entry.quantity, field: 'quantity', min: 0, label: 'quantity' },
+    { val: entry.lhvGjPerUnit, field: 'lhvGjPerUnit', min: 0, label: 'LHV override' },
+    { val: entry.co2EfKgPerGj, field: 'co2EfKgPerGj', min: 0, label: 'CO2 EF override' },
+    { val: entry.ch4EfKgPerGj, field: 'ch4EfKgPerGj', min: 0, label: 'CH4 EF override' },
+    { val: entry.n2oEfKgPerGj, field: 'n2oEfKgPerGj', min: 0, label: 'N2O EF override' },
+    { val: entry.carbonContentFraction, field: 'carbonContentFraction', min: 0, max: 1, label: 'carbon content fraction' },
+    { val: entry.directCo2Tonnes, field: 'directCo2Tonnes', min: 0, label: 'direct CO2' },
+  ]
+  for (const n of numericFields) {
+    if (typeof n.val === 'number') {
+      if (n.min !== undefined && n.val < n.min) {
+        ctx.error(
+          'negative_input_value',
+          `Fuel "${entry.label}" ${n.label} cannot be negative (${n.val}).`,
+          `${fieldBase}.${n.field}`,
+        )
+        return zero
+      }
+      if (n.max !== undefined && n.val > n.max) {
+        ctx.error(
+          'input_out_of_range',
+          `Fuel "${entry.label}" ${n.label} must be ≤ ${n.max} (got ${n.val}).`,
+          `${fieldBase}.${n.field}`,
+        )
+        return zero
+      }
+    }
+  }
+
+  // --- unit mismatch: blocking when no LHV override is supplied -----------
+  if (
+    def &&
+    entry.quantityUnit &&
+    entry.quantityUnit !== def.defaultUnit &&
+    isMissing(entry.lhvGjPerUnit) &&
+    method === 'ENERGY_BASED'
+  ) {
+    ctx.error(
+      'unit_mismatch_no_lhv_override',
+      `Fuel "${entry.label}" uses unit ${entry.quantityUnit} but the library LHV for ${entry.fuelCode} is per ${def.defaultUnit}. Supply an LHV override in GJ/${entry.quantityUnit} or change the unit.`,
+      `${fieldBase}.quantityUnit`,
+    )
+    return zero
+  }
+
+  // --- category mismatch: block the dangerous fossil -> biomass case ------
+  const fossilCategories = new Set<FuelEntry['category']>(['CONVENTIONAL_FOSSIL', 'ALTERNATIVE_FOSSIL'])
+  if (def && fossilCategories.has(def.category) && entry.category === 'BIOMASS') {
+    ctx.error(
+      'fossil_fuel_marked_as_biomass',
+      `Fuel "${entry.label}" library default is ${def.category} but it is marked BIOMASS. That would move all fossil CO2 to the biomass memo. Use a biomass fuel code (e.g. solid_biomass) or change the category.`,
+      `${fieldBase}.category`,
+    )
+    return zero
+  }
+  if (def && entry.category && entry.category !== def.category) {
+    ctx.warn(
+      'fuel_category_mismatch',
+      `Fuel "${entry.label}" is marked ${entry.category} but the library default for ${entry.fuelCode} is ${def.category}. Confirm this is intentional.`,
+      `${fieldBase}.category`,
+    )
+  }
+
+  // --- override reason: warn if any override is supplied with no reason --
+  if (hasAnyOverride(entry) && !((entry.overrideReason ?? '').trim())) {
+    ctx.warn(
+      'override_missing_reason',
+      `Fuel "${entry.label}" overrides a library default but no reason was recorded.`,
+      `${fieldBase}.overrideReason`,
+    )
+  }
 
   if (isMissing(entry.quantity) && method !== 'DIRECT_MEASUREMENT') {
-    ctx.error('missing_fuel_quantity', `Fuel "${entry.label}" has no quantity.`, `fuel.${entry.id}.quantity`)
-    return { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+    ctx.error('missing_fuel_quantity', `Fuel "${entry.label}" has no quantity.`, `${fieldBase}.quantity`)
+    return zero
   }
 
   let totalCO2 = 0
@@ -74,9 +164,9 @@ export function calculateFuel(
       ctx.error(
         'missing_fuel_emission_factor',
         `Fuel "${entry.label}" uses direct measurement but no metered CO2 was provided.`,
-        `fuel.${entry.id}.directCo2Tonnes`,
+        `${fieldBase}.directCo2Tonnes`,
       )
-      return { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+      return zero
     }
     totalCO2 = entry.directCo2Tonnes
     traceFormula = 'directly metered CO2'
@@ -86,9 +176,9 @@ export function calculateFuel(
       ctx.error(
         'missing_fuel_emission_factor',
         `Fuel "${entry.label}" uses carbon-content method but carbon content is missing.`,
-        `fuel.${entry.id}.carbonContentFraction`,
+        `${fieldBase}.carbonContentFraction`,
       )
-      return { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+      return zero
     }
     const co2PerC = ctx.resolver.constant('CO2_PER_C')
     totalCO2 = (entry.quantity as number) * entry.carbonContentFraction * co2PerC
@@ -108,9 +198,9 @@ export function calculateFuel(
         ctx.error(
           'missing_lhv_for_energy_based_fuel',
           `Fuel "${entry.label}" uses energy-based method but LHV is missing and no library default exists.`,
-          `fuel.${entry.id}.lhvGjPerUnit`,
+          `${fieldBase}.lhvGjPerUnit`,
         )
-        return { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+        return zero
       }
     }
     let ef = entry.co2EfKgPerGj
@@ -125,12 +215,25 @@ export function calculateFuel(
         ctx.error(
           'missing_fuel_emission_factor',
           `Fuel "${entry.label}" has no CO2 emission factor and no library default.`,
-          `fuel.${entry.id}.co2EfKgPerGj`,
+          `${fieldBase}.co2EfKgPerGj`,
         )
-        return { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+        return zero
       }
     }
-    recordFuelFactorSnapshot(ctx, entry.fuelCode, ef as number, efOverridden)
+    if (
+      efOverridden &&
+      (ef as number) === 0 &&
+      fossilCategories.has(category) &&
+      !((entry.overrideReason ?? '').trim())
+    ) {
+      ctx.error(
+        'zero_fossil_co2_ef_without_reason',
+        `Fuel "${entry.label}" CO2 EF was overridden to 0 on a fossil fuel without a recorded reason. Add a reason (e.g. CCS at fuel level / metered zero) or use the direct-measurement method.`,
+        `${fieldBase}.co2EfKgPerGj`,
+      )
+      return zero
+    }
+    recordFuelFactorSnapshot(ctx, entry.fuelCode, ef as number, efOverridden, entry.overrideReason)
     energyTJ = ((entry.quantity as number) * (lhv as number)) / 1000
     totalCO2 = energyTJ * (ef as number)
     traceFormula = 'energyTJ = qty x LHV / 1000 ; CO2 t = energyTJ x EF(kgCO2/GJ)'
@@ -142,28 +245,36 @@ export function calculateFuel(
 
   // --- fossil / biomass split ---------------------------------------------
   let biomassFraction: number
+  const rawBiomassFraction = entry.biomassFraction
+  if (isPresent(rawBiomassFraction) && (rawBiomassFraction < 0 || rawBiomassFraction > 1)) {
+    ctx.warn(
+      'biomass_fraction_outside_0_1',
+      `Fuel "${entry.label}" biomass fraction ${rawBiomassFraction} is outside [0, 1]; clamped.`,
+      `${fieldBase}.biomassFraction`,
+    )
+  }
   if (category === 'BIOMASS') {
-    biomassFraction = orDefault(entry.biomassFraction, def?.biomassFraction ?? 1)
+    biomassFraction = orDefault(rawBiomassFraction, def?.biomassFraction ?? 1)
   } else if (category === 'MIXED') {
-    if (isPresent(entry.biomassFraction)) {
-      biomassFraction = entry.biomassFraction
+    if (isPresent(rawBiomassFraction)) {
+      biomassFraction = rawBiomassFraction
     } else if (def) {
       biomassFraction = def.biomassFraction
       ctx.warn(
         'alternative_fuel_split_unknown',
         `Fuel "${entry.label}" is mixed; biomass split not provided. Library default ${biomassFraction} used.`,
-        `fuel.${entry.id}.biomassFraction`,
+        `${fieldBase}.biomassFraction`,
       )
     } else {
       biomassFraction = 0
       ctx.warn(
         'alternative_fuel_split_unknown',
         `Fuel "${entry.label}" is mixed with unknown split and no default; treated as 100% fossil (conservative).`,
-        `fuel.${entry.id}.biomassFraction`,
+        `${fieldBase}.biomassFraction`,
       )
     }
   } else {
-    biomassFraction = orDefault(entry.biomassFraction, def?.biomassFraction ?? 0)
+    biomassFraction = orDefault(rawBiomassFraction, def?.biomassFraction ?? 0)
   }
   biomassFraction = Math.min(Math.max(biomassFraction, 0), 1)
 

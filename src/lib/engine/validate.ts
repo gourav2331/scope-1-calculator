@@ -42,6 +42,14 @@ export function validateInput(ctx: EngineContext, payload: InputPayload): void {
   if (isPresent(cement) && cement < 0) {
     ctx.error('negative_production_value', 'Cement production cannot be negative.', 'activityData.production.cementProducedTonnes')
   }
+  const cementitious = activityData.production.cementitiousProductTonnes
+  if (isPresent(cementitious) && cementitious < 0) {
+    ctx.error(
+      'negative_production_value',
+      'Cementitious product cannot be negative.',
+      'activityData.production.cementitiousProductTonnes',
+    )
+  }
 
   // --- process method requirements ----------------------------------------
   if (methodSelections.processEmissionMethod === 'CSI_CLINKER_BASED') {
@@ -86,6 +94,42 @@ export function validateInput(ctx: EngineContext, payload: InputPayload): void {
           `sourceApplicability.exclusionReasons.${String(key)}`,
         )
       }
+    }
+  }
+
+  // --- supporting activity negative checks --------------------------------
+  const mwh = activityData.purchasedElectricity.mwh
+  if (isPresent(mwh) && mwh < 0) {
+    ctx.error('negative_input_value', 'Purchased electricity (MWh) cannot be negative.', 'activityData.purchasedElectricity.mwh')
+  }
+  const bought = activityData.boughtClinker.externalClinkerBoughtTonnes
+  if (isPresent(bought) && bought < 0) {
+    ctx.error('negative_input_value', 'External clinker bought cannot be negative.', 'activityData.boughtClinker.externalClinkerBoughtTonnes')
+  }
+  const sold = activityData.boughtClinker.externalClinkerSoldTonnes
+  if (isPresent(sold) && sold < 0) {
+    ctx.error('negative_input_value', 'External clinker sold cannot be negative.', 'activityData.boughtClinker.externalClinkerSoldTonnes')
+  }
+  const acquired = activityData.emissionRights.acquiredTonnes
+  if (isPresent(acquired) && acquired < 0) {
+    ctx.error('negative_input_value', 'Acquired emission rights cannot be negative.', 'activityData.emissionRights.acquiredTonnes')
+  }
+
+  // --- factor override sanity (negative blocks, missing reason warns) -----
+  for (const [code, ov] of Object.entries(payload.factorOverrides ?? {})) {
+    if (typeof ov.value === 'number' && ov.value < 0) {
+      ctx.error(
+        'factor_override_invalid',
+        `Factor override for "${code}" must be >= 0 (got ${ov.value}).`,
+        `factorOverrides.${code}.value`,
+      )
+    }
+    if (!(ov.reason ?? '').trim()) {
+      ctx.warn(
+        'override_missing_reason',
+        `Factor override for "${code}" has no reason recorded - the audit trail will be weaker.`,
+        `factorOverrides.${code}.reason`,
+      )
     }
   }
 

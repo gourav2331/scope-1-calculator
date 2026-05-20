@@ -54,6 +54,22 @@ export function calculateFugitive(ctx: EngineContext, entries: FugitiveEntry[]):
       )
       continue
     }
+    if ((entry.leakedKg as number) < 0) {
+      ctx.error(
+        'negative_input_value',
+        `Fugitive entry "${entry.label}" leaked quantity cannot be negative (${entry.leakedKg}).`,
+        `fugitive.${entry.id}.leakedKg`,
+      )
+      continue
+    }
+    if (isPresent(entry.gwpOverride) && (entry.gwpOverride as number) <= 0) {
+      ctx.error(
+        'gwp_override_invalid',
+        `Fugitive entry "${entry.label}" GWP override must be > 0 (got ${entry.gwpOverride}).`,
+        `fugitive.${entry.id}.gwpOverride`,
+      )
+      continue
+    }
 
     const gas = GAS_DEFAULTS[entry.gasCode]
     const overridden = isPresent(entry.gwpOverride)
@@ -71,6 +87,14 @@ export function calculateFugitive(ctx: EngineContext, entries: FugitiveEntry[]):
       continue
     }
 
+    if (overridden && !((entry.overrideReason ?? '').trim())) {
+      ctx.warn(
+        'override_missing_reason',
+        `Fugitive entry "${entry.label}" has a GWP override but no reason was recorded.`,
+        `fugitive.${entry.id}.overrideReason`,
+      )
+    }
+
     const co2e = (entry.leakedKg * gwp) / 1000
     totalCO2e += co2e
 
@@ -85,6 +109,7 @@ export function calculateFugitive(ctx: EngineContext, entries: FugitiveEntry[]):
       priorityRank: overridden ? 6 : 5,
       isDefault: !overridden,
       overridden,
+      overrideReason: overridden ? entry.overrideReason : undefined,
     })
     const inputs: Record<string, number | string | null> = {
       leakedKg: entry.leakedKg,

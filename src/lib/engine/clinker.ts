@@ -55,7 +55,22 @@ export function resolveClinkerEf(
       }
     }
 
+    // Range check: CaO % must be a physical 0..100.
+    if (chem.caoPercent < 0 || chem.caoPercent > 100) {
+      ctx.error(
+        'cao_mgo_out_of_range',
+        `Clinker CaO ${chem.caoPercent}% is outside the physical range [0, 100].`,
+        'activityData.clinkerChemistry.caoPercent',
+      )
+    }
     const caoNonCarb = isPresent(chem.caoNonCarbonatePercent) ? chem.caoNonCarbonatePercent : 0
+    if (isPresent(chem.caoNonCarbonatePercent) && chem.caoNonCarbonatePercent < 0) {
+      ctx.error(
+        'negative_input_value',
+        `Non-carbonate CaO % cannot be negative (${chem.caoNonCarbonatePercent}).`,
+        'activityData.clinkerChemistry.caoNonCarbonatePercent',
+      )
+    }
     if (isMissing(chem.caoNonCarbonatePercent)) {
       ctx.warn(
         'high_toc_material_without_lab_data',
@@ -74,7 +89,21 @@ export function resolveClinkerEf(
 
     let correctedMgo = 0
     if (isPresent(chem.mgoPercent)) {
+      if (chem.mgoPercent < 0 || chem.mgoPercent > 100) {
+        ctx.error(
+          'cao_mgo_out_of_range',
+          `Clinker MgO ${chem.mgoPercent}% is outside the physical range [0, 100].`,
+          'activityData.clinkerChemistry.mgoPercent',
+        )
+      }
       const mgoNonCarb = isPresent(chem.mgoNonCarbonatePercent) ? chem.mgoNonCarbonatePercent : 0
+      if (isPresent(chem.mgoNonCarbonatePercent) && chem.mgoNonCarbonatePercent < 0) {
+        ctx.error(
+          'negative_input_value',
+          `Non-carbonate MgO % cannot be negative (${chem.mgoNonCarbonatePercent}).`,
+          'activityData.clinkerChemistry.mgoNonCarbonatePercent',
+        )
+      }
       correctedMgo = (chem.mgoPercent - mgoNonCarb) / 100
       if (correctedMgo < 0) {
         ctx.error(

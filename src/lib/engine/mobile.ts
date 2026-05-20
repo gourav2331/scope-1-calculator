@@ -16,11 +16,29 @@ export interface MobileTotals {
   ch4N2oCO2eTonnes: number
 }
 
+function negCheck(ctx: EngineContext, v: number | null | undefined, field: string, label: string, entryId: string) {
+  if (typeof v === 'number' && v < 0) {
+    ctx.error('negative_input_value', `Mobile ${label} cannot be negative (${v}).`, `mobile.${entryId}.${field}`)
+    return true
+  }
+  return false
+}
+
 function deriveFuelQuantity(
   ctx: EngineContext,
   method: MethodSelections['mobileCombustionMethod'],
   entry: MobileEntry,
 ): number | null {
+  // Negative-value guards apply regardless of method.
+  if (
+    negCheck(ctx, entry.quantity, 'quantity', 'fuel quantity', entry.id) ||
+    negCheck(ctx, entry.operatingHours, 'operatingHours', 'operating hours', entry.id) ||
+    negCheck(ctx, entry.consumptionRatePerHour, 'consumptionRatePerHour', 'consumption rate', entry.id) ||
+    negCheck(ctx, entry.distanceKm, 'distanceKm', 'distance', entry.id) ||
+    negCheck(ctx, entry.fuelPerKm, 'fuelPerKm', 'fuel per km', entry.id)
+  ) {
+    return null
+  }
   if (method === 'EQUIPMENT_HOURS_BASED') {
     if (isMissing(entry.operatingHours) || isMissing(entry.consumptionRatePerHour)) {
       ctx.error(
@@ -88,8 +106,8 @@ export function calculateMobile(
     } else {
       totals.thirdPartyCO2Tonnes += o.fossilCO2Tonnes
       ctx.warn(
-        'internal_external_clinker_split_missing',
-        `Mobile "${entry.label}" is third-party; excluded from gross Scope 1 (supporting Scope 3).`,
+        'third_party_mobile_excluded',
+        `Mobile "${entry.label}" is third-party; excluded from gross Scope 1 and bucketed into supporting Scope 3.`,
         `mobile.${entry.id}.ownership`,
       )
       ctx.addTrace({

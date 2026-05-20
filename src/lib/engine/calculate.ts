@@ -1,8 +1,9 @@
 /**
  * Calculation orchestrator: validate -> resolve effective methods (with
- * automatic fallback) -> calculate every bucket separately -> assemble the
- * spec result model -> assert scope separation. Pure and deterministic so it
- * can be unit-tested exhaustively (the correctness requirement).
+ * automatic fallback) -> calculate every bucket separately -> apply equity
+ * share consolidation (when applicable) -> assemble the spec result model ->
+ * assert scope separation. Pure and deterministic so it can be unit-tested
+ * exhaustively (the correctness requirement).
  */
 
 import { calculateCombustion } from './combustion'
@@ -50,16 +51,16 @@ export function calculate(payload: InputPayload, calculationId: string | null = 
   let ckdCO2 = 0
   let rawMealTocCO2 = 0
 
-  if (applicability.clinkerCalcination !== false) {
-    if (effectiveProcessMethod === 'US_EPA_CEMENT_BASED_FALLBACK') {
+  if (effectiveProcessMethod === 'US_EPA_CEMENT_BASED_FALLBACK') {
+    if (applicability.clinkerCalcination !== false) {
       clinkerCalcinationCO2 = calculateUsEpaFallback(ctx, activity)
-    } else {
-      const proc = calculateProcess(ctx, effectivePayload.methodSelections, activity)
-      clinkerCalcinationCO2 = proc.clinkerCalcinationCO2Tonnes
-      bypassDustCO2 = applicability.bypassDust === false ? 0 : proc.bypassDustCO2Tonnes
-      ckdCO2 = applicability.ckd === false ? 0 : proc.ckdCO2Tonnes
-      rawMealTocCO2 = applicability.rawMealToc === false ? 0 : proc.rawMealTocCO2Tonnes
     }
+  } else {
+    const proc = calculateProcess(ctx, effectivePayload.methodSelections, activity, applicability)
+    clinkerCalcinationCO2 = proc.clinkerCalcinationCO2Tonnes
+    bypassDustCO2 = proc.bypassDustCO2Tonnes
+    ckdCO2 = proc.ckdCO2Tonnes
+    rawMealTocCO2 = proc.rawMealTocCO2Tonnes
   }
 
   // --- combustion ---------------------------------------------------------
@@ -95,27 +96,81 @@ export function calculate(payload: InputPayload, calculationId: string | null = 
       : activity,
   )
 
+  // --- equity-share consolidation -----------------------------------------
+  // For OPERATIONAL_CONTROL and FINANCIAL_CONTROL, the company reports 100%
+  // of the facility's emissions. For EQUITY_SHARE, the company reports its
+  // share, so every bucket is scaled by ownershipSharePercent / 100.
+  const isEquityShare = payload.organizationBoundary?.boundaryMethod === 'EQUITY_SHARE'
+  // Prefer consolidationPercent (the CSI/GHGP term); fall back to legacy
+  // ownershipSharePercent only when consolidationPercent is unspecified.
+  const sharePercent =
+    payload.organizationBoundary?.consolidationPercent ??
+    payload.organizationBoundary?.ownershipSharePercent ??
+    100
+  const shareFactor = isEquityShare
+    ? Math.min(Math.max((sharePercent ?? 100) / 100, 0), 1)
+    : 1
+  if (isEquityShare) {
+    ctx.fallbacksApplied.add(
+      `Equity share consolidation applied (${(shareFactor * 100).toFixed(2)}%)`,
+    )
+    if (sharePercent < 0 || sharePercent > 100) {
+      ctx.error(
+        'consolidation_share_out_of_range',
+        `Consolidation share ${sharePercent}% is outside [0, 100].`,
+        'organizationBoundary.consolidationPercent',
+      )
+    }
+    ctx.addTrace({
+      step: `Equity share consolidation x ${(shareFactor * 100).toFixed(2)}%`,
+      category: 'CONSOLIDATION',
+      method: 'EQUITY_SHARE',
+      formula: 'each Scope 1 bucket x consolidationPercent / 100',
+      inputs: { consolidationPercent: sharePercent ?? 100 },
+      factorSnapshots: ctx.resolver.list(),
+      outputTonnesCO2: 0,
+    })
+  }
+
+  const scale = (n: number) => n * shareFactor
+  clinkerCalcinationCO2 = scale(clinkerCalcinationCO2)
+  bypassDustCO2 = scale(bypassDustCO2)
+  ckdCO2 = scale(ckdCO2)
+  rawMealTocCO2 = scale(rawMealTocCO2)
+  const conventionalKilnScoped = scale(combustion.conventionalKilnFossilCO2Tonnes)
+  const alternativeFossilKilnScoped = scale(combustion.alternativeFossilKilnCO2Tonnes)
+  const nonKilnFossilScoped = scale(combustion.nonKilnFossilCO2Tonnes)
+  const mobileOwnedScoped = scale(mobile.ownedControlledCO2Tonnes)
+  const mobileThirdPartyScoped = scale(mobile.thirdPartyCO2Tonnes)
+  const fugitiveScoped = scale(fugitiveCO2e)
+  const biomassMemoScoped = scale(combustion.biomassCO2Tonnes)
+  const electricityScoped = scale(supporting.purchasedElectricityCO2Tonnes)
+  const boughtClinkerScoped = scale(supporting.boughtClinkerCO2Tonnes)
+  const acquiredRightsScoped = scale(supporting.acquiredEmissionRightsTonnes)
+  const ch4n2oScoped = scale(combustion.ch4N2oCO2eTonnes + mobile.ch4N2oCO2eTonnes)
+
   // --- assemble -----------------------------------------------------------
   const components = {
     clinkerCalcinationCO2Tonnes: round(clinkerCalcinationCO2, 4),
     bypassDustCO2Tonnes: round(bypassDustCO2, 4),
     ckdCO2Tonnes: round(ckdCO2, 4),
     rawMealTocCO2Tonnes: round(rawMealTocCO2, 4),
-    conventionalKilnFuelCO2Tonnes: round(combustion.conventionalKilnFossilCO2Tonnes, 4),
-    alternativeFossilKilnFuelCO2Tonnes: round(combustion.alternativeFossilKilnCO2Tonnes, 4),
-    nonKilnFossilCO2Tonnes: round(combustion.nonKilnFossilCO2Tonnes, 4),
-    mobileCombustionCO2Tonnes: round(mobile.ownedControlledCO2Tonnes, 4),
-    fugitiveCO2eTonnes: round(fugitiveCO2e, 4),
+    conventionalKilnFuelCO2Tonnes: round(conventionalKilnScoped, 4),
+    alternativeFossilKilnFuelCO2Tonnes: round(alternativeFossilKilnScoped, 4),
+    nonKilnFossilCO2Tonnes: round(nonKilnFossilScoped, 4),
+    mobileCombustionCO2Tonnes: round(mobileOwnedScoped, 4),
+    fugitiveCO2eTonnes: round(fugitiveScoped, 4),
   }
   const grossScope1 = round(
     Object.values(components).reduce((a, b) => a + b, 0),
     4,
   )
 
-  const biomassMemo = round(combustion.biomassCO2Tonnes, 4)
-  const electricityCO2 = round(supporting.purchasedElectricityCO2Tonnes, 4)
-  const boughtClinkerCO2 = round(supporting.boughtClinkerCO2Tonnes, 4)
-  const acquiredRights = round(supporting.acquiredEmissionRightsTonnes, 4)
+  const biomassMemo = round(biomassMemoScoped, 4)
+  const electricityCO2 = round(electricityScoped, 4)
+  const boughtClinkerCO2 = round(boughtClinkerScoped, 4)
+  const thirdPartyMobileCO2 = round(mobileThirdPartyScoped, 4)
+  const acquiredRights = round(acquiredRightsScoped, 4)
 
   const clinkerProduced = activity.production.clinkerProducedTonnes
   const cementitious = activity.production.cementitiousProductTonnes
@@ -123,7 +178,7 @@ export function calculate(payload: InputPayload, calculationId: string | null = 
   const netCO2 =
     netMethod === 'GROSS_MINUS_EMISSION_RIGHTS' ? round(grossScope1 - acquiredRights, 4) : null
 
-  const ch4n2o = round(combustion.ch4N2oCO2eTonnes + mobile.ch4N2oCO2eTonnes, 4)
+  const ch4n2o = round(ch4n2oScoped, 4)
 
   const defaultsUsed = Array.from(ctx.defaultsUsed)
   const fallbacksApplied = Array.from(ctx.fallbacksApplied)
@@ -147,6 +202,7 @@ export function calculate(payload: InputPayload, calculationId: string | null = 
         biomassCO2MemoTonnes: biomassMemo,
         purchasedElectricityCO2Tonnes: electricityCO2,
         boughtClinkerCO2Tonnes: boughtClinkerCO2,
+        thirdPartyMobileCO2Tonnes: thirdPartyMobileCO2,
         emissionRightsTonnes: acquiredRights,
       },
     },
@@ -157,22 +213,28 @@ export function calculate(payload: InputPayload, calculationId: string | null = 
     },
     memoItems: { biomassCO2Tonnes: biomassMemo },
     supportingScope2: { purchasedElectricityCO2Tonnes: electricityCO2 },
-    supportingScope3: { boughtClinkerCO2Tonnes: boughtClinkerCO2 },
+    supportingScope3: {
+      boughtClinkerCO2Tonnes: boughtClinkerCO2,
+      thirdPartyMobileCO2Tonnes: thirdPartyMobileCO2,
+    },
     optionalNetReporting: {
       method: netMethod,
       acquiredEmissionRightsTonnes: acquiredRights,
       netCO2Tonnes: netCO2,
     },
-    intensityMetrics: {
-      grossCO2PerTonneClinker:
-        isPresent(clinkerProduced) && clinkerProduced > 0
-          ? round((grossScope1 * 1000) / clinkerProduced, 3)
-          : null,
-      grossCO2PerTonneCementitious:
-        isPresent(cementitious) && cementitious > 0
-          ? round((grossScope1 * 1000) / cementitious, 3)
-          : null,
-    },
+    intensityMetrics: (() => {
+      // Plant-level intensity: both numerator (gross) and denominator
+      // (clinker / cementitious) are at the same consolidation share, so
+      // intensity is invariant to ownership and represents the plant.
+      const denomClinker =
+        isPresent(clinkerProduced) && clinkerProduced > 0 ? clinkerProduced * shareFactor : 0
+      const denomCem =
+        isPresent(cementitious) && cementitious > 0 ? cementitious * shareFactor : 0
+      return {
+        grossCO2PerTonneClinker: denomClinker > 0 ? round((grossScope1 * 1000) / denomClinker, 3) : null,
+        grossCO2PerTonneCementitious: denomCem > 0 ? round((grossScope1 * 1000) / denomCem, 3) : null,
+      }
+    })(),
     dataQuality: { defaultsUsed, fallbacksApplied, overall },
     warnings: ctx.warnings,
     errors: ctx.errors,

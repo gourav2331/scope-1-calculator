@@ -8,20 +8,25 @@ import {
   FileSpreadsheet,
   FileText,
   Flame,
+  Info,
   Moon,
   Plus,
+  Search,
   Sun,
   Trash2,
   Truck,
   Wind,
+  X,
 } from 'lucide-react'
 
 import type {
   CalculationResult,
   FactorSnapshot,
+  FuelCombustionMethod,
   FuelEntry,
   FugitiveEntry,
   InputPayload,
+  MobileCombustionMethod,
   MobileEntry,
   TraceEntry,
 } from '@/lib/engine/types'
@@ -43,6 +48,11 @@ const FUEL_CODES = [
   'waste_plastics',
   'mixed_industrial_waste',
   'solid_biomass',
+  // Heidelberg / Cemex / Holcim style alternative fuels
+  'meat_bone_meal',
+  'dried_sewage_sludge',
+  'solvents',
+  'agricultural_residue',
 ]
 
 const GAS_CODES = ['r22', 'r32', 'r134a', 'r404a', 'r407c', 'r410a', 'r507a', 'r23', 'sf6']
@@ -68,7 +78,7 @@ function emptyPayload(): InputPayload {
       inventoryVersion: 'DRAFT_V1',
       gwpSet: 'AR6',
     },
-    organization: { name: '', country: 'IN' },
+    organization: { name: '', country: 'IN', contactName: '', contactEmail: '', contactPhone: '', contactRole: '' },
     facility: { name: '', facilityType: 'INTEGRATED_CEMENT', state: '' },
     organizationBoundary: {
       boundaryMethod: 'OPERATIONAL_CONTROL',
@@ -164,33 +174,23 @@ function NumField({
 
 /* ----------------------- Scope badges & live previews --------------------- */
 
-const BADGE_BASE: React.CSSProperties = {
-  fontSize: 10,
-  fontWeight: 600,
-  padding: '2px 8px',
-  borderRadius: 12,
-  letterSpacing: 0.2,
-  display: 'inline-block',
-}
-const BADGE_S1: React.CSSProperties = { ...BADGE_BASE, background: '#dff5e9', color: '#0b6b3a' }
-const BADGE_MEMO: React.CSSProperties = { ...BADGE_BASE, background: '#fff3cd', color: '#7a5a00' }
-const BADGE_EXCL: React.CSSProperties = { ...BADGE_BASE, background: '#f1f3f5', color: '#5a6678' }
-const BADGE_MIXED: React.CSSProperties = { ...BADGE_BASE, background: '#e6f0ff', color: '#0b3d6b' }
-
 function fuelBadge(category: FuelEntry['category']) {
-  if (category === 'BIOMASS') return <span style={BADGE_MEMO}>Biomass memo (excluded)</span>
-  if (category === 'MIXED') return <span style={BADGE_MIXED}>Gross Scope 1 + biomass memo</span>
-  if (category === 'ALTERNATIVE_FOSSIL') return <span style={BADGE_S1}>Gross Scope 1 (alt fossil)</span>
-  return <span style={BADGE_S1}>Gross Scope 1</span>
+  if (category === 'BIOMASS')
+    return <span className="entry-badge entry-badge-memo">Biomass memo (excluded)</span>
+  if (category === 'MIXED')
+    return <span className="entry-badge entry-badge-mixed">Gross Scope 1 + biomass memo</span>
+  if (category === 'ALTERNATIVE_FOSSIL')
+    return <span className="entry-badge entry-badge-s1">Gross Scope 1 (alt fossil)</span>
+  return <span className="entry-badge entry-badge-s1">Gross Scope 1</span>
 }
 function mobileBadge(ownership: MobileEntry['ownership']) {
   return ownership === 'OWNED_CONTROLLED' ? (
-    <span style={BADGE_S1}>Gross Scope 1</span>
+    <span className="entry-badge entry-badge-s1">Gross Scope 1</span>
   ) : (
-    <span style={BADGE_EXCL}>Excluded (third-party)</span>
+    <span className="entry-badge entry-badge-excl">Excluded (third-party)</span>
   )
 }
-const FUGITIVE_BADGE = <span style={BADGE_S1}>Gross Scope 1 (CO2e)</span>
+const FUGITIVE_BADGE = <span className="entry-badge entry-badge-s1">Gross Scope 1 (CO2e)</span>
 
 function findTraceOutput(trace: TraceEntry[] | undefined, predicate: (s: string) => boolean): number | null {
   if (!trace) return null
@@ -217,6 +217,8 @@ export function Scope1Wizard() {
   const [result, setResult] = useState<CalculationResult | null>(null)
   const [live, setLive] = useState<CalculationResult | null>(null)
   const [busy, setBusy] = useState(false)
+  const [step2Tried, setStep2Tried] = useState(false)
+  const [step3Tried, setStep3Tried] = useState(false)
   const [factors, setFactors] = useState<{
     constants: { factorCode: string; factorName: string; value: number; unit: string; source: string }[]
     gases: { gasCode: string; name: string; gwpAR5: number; gwpAR6: number }[]
@@ -295,6 +297,45 @@ export function Scope1Wizard() {
     return map
   }, [factors, p.calculationContext.gwpSet])
 
+  // ---- step-level validation (gates both Continue buttons AND the top stepper)
+  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const orgValid =
+    !!p.organization.name.trim() &&
+    !!(p.organization.contactName ?? '').trim() &&
+    emailRe.test((p.organization.contactEmail ?? '').trim())
+  const facilityValid = !!p.facility.name.trim()
+  const canReach = (target: number): boolean => {
+    if (target <= 2) return true
+    if (target === 3) return orgValid
+    if (target === 4) return orgValid && facilityValid
+    if (target === 5) return orgValid && facilityValid && !!result
+    return false
+  }
+  function tryGoTo(target: number) {
+    if (target === step) return
+    if (target < step) {
+      setStep(target)
+      return
+    }
+    // forward jump - bounce to the first unsatisfied step
+    if (target > 2 && !orgValid) {
+      setStep2Tried(true)
+      setStep(2)
+      return
+    }
+    if (target > 3 && !facilityValid) {
+      setStep3Tried(true)
+      setStep(3)
+      return
+    }
+    if (target === 5 && !result) {
+      // can't view results without calculating first
+      setStep(4)
+      return
+    }
+    setStep(target)
+  }
+
   return (
     <main className={theme === 'dark' ? 'wizard-app dark' : 'wizard-app'}>
       <header className="wizard-header">
@@ -326,16 +367,32 @@ export function Scope1Wizard() {
       </header>
 
       <nav className="wizard-progress">
-        {STEPS.map((label, i) => (
-          <button
-            key={label}
-            className={step === i + 1 ? 'active' : step > i + 1 ? 'complete' : ''}
-            onClick={() => setStep(i + 1)}
-          >
-            <span>{i + 1}</span>
-            <b>{label}</b>
-          </button>
-        ))}
+        {STEPS.map((label, i) => {
+          const target = i + 1
+          const reachable = canReach(target)
+          const lockedTitle = !reachable
+            ? target === 3
+              ? 'Complete the required organisation fields first.'
+              : target === 4
+                ? 'Add a facility name first.'
+                : target === 5
+                  ? 'Click Calculate Scope 1 first to see the report.'
+                  : ''
+            : undefined
+          return (
+            <button
+              key={label}
+              className={step === target ? 'active' : step > target ? 'complete' : ''}
+              onClick={() => tryGoTo(target)}
+              disabled={!reachable && target !== step}
+              title={lockedTitle}
+              aria-disabled={!reachable && target !== step}
+            >
+              <span>{target}</span>
+              <b>{label}</b>
+            </button>
+          )
+        })}
       </nav>
 
       <section className="wizard-main">
@@ -372,74 +429,154 @@ export function Scope1Wizard() {
           </section>
         )}
 
-        {step === 2 && (
-          <section className="step-page active">
-            <h1 className="step-title">
-              Organisation &amp; <em>boundary</em>
-            </h1>
-            <p className="step-sub">The consolidation boundary determines which sources fall inside Scope 1.</p>
-            <div className="form-card">
-              <h2>Company</h2>
-              <label className="field">
-                Company name
-                <input
-                  value={p.organization.name}
-                  placeholder="e.g. Surya Cement Pvt Ltd"
-                  onChange={(e) => patch((d) => (d.organization.name = e.target.value))}
-                />
-              </label>
-              <div className="field-row">
+        {step === 2 && (() => {
+          const o = p.organization
+          const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((o.contactEmail ?? '').trim())
+          const err = {
+            name: !o.name.trim(),
+            contactName: !(o.contactName ?? '').trim(),
+            contactEmail: !(o.contactEmail ?? '').trim() || !emailOk,
+          }
+          const invalid = err.name || err.contactName || err.contactEmail
+          const show = step2Tried
+          return (
+            <section className="step-page active">
+              <h1 className="step-title">
+                Organisation &amp; <em>boundary</em>
+              </h1>
+              <p className="step-sub">The consolidation boundary determines which sources fall inside Scope 1.</p>
+
+              <div className="form-card">
+                <h2>Company</h2>
                 <label className="field">
-                  Operating country
-                  <select
-                    value={p.organization.country}
-                    onChange={(e) => patch((d) => (d.organization.country = e.target.value))}
-                  >
-                    <option value="IN">India</option>
-                    <option value="GLOBAL">Other</option>
-                  </select>
+                  Company name<span className="required-mark">*</span>
+                  <input
+                    value={o.name}
+                    placeholder="e.g. Surya Cement Pvt Ltd"
+                    onChange={(e) => patch((d) => (d.organization.name = e.target.value))}
+                  />
+                  {show && err.name && <div className="field-error">Company name is required.</div>}
                 </label>
-                <label className="field">
-                  Consolidation / boundary method
-                  <select
-                    value={p.organizationBoundary.boundaryMethod}
-                    onChange={(e) =>
-                      patch((d) => (d.organizationBoundary.boundaryMethod = e.target.value as InputPayload['organizationBoundary']['boundaryMethod']))
-                    }
-                  >
-                    <option value="OPERATIONAL_CONTROL">Operational control</option>
-                    <option value="FINANCIAL_CONTROL">Financial control</option>
-                    <option value="EQUITY_SHARE">Equity share</option>
-                  </select>
-                </label>
+                <div className="field-row">
+                  <label className="field">
+                    Operating country
+                    <select
+                      value={o.country}
+                      onChange={(e) => patch((d) => (d.organization.country = e.target.value))}
+                    >
+                      <option value="IN">India</option>
+                      <option value="GLOBAL">Other</option>
+                    </select>
+                  </label>
+                  <label className="field">
+                    Consolidation / boundary method
+                    <select
+                      value={p.organizationBoundary.boundaryMethod}
+                      onChange={(e) =>
+                        patch((d) => (d.organizationBoundary.boundaryMethod = e.target.value as InputPayload['organizationBoundary']['boundaryMethod']))
+                      }
+                    >
+                      <option value="OPERATIONAL_CONTROL">Operational control</option>
+                      <option value="FINANCIAL_CONTROL">Financial control</option>
+                      <option value="EQUITY_SHARE">Equity share</option>
+                    </select>
+                  </label>
+                </div>
+                {p.organizationBoundary.boundaryMethod === 'EQUITY_SHARE' ? (
+                  <div className="field-row">
+                    <NumField
+                      label="Consolidation / equity share %"
+                      step="0.01"
+                      value={p.organizationBoundary.consolidationPercent}
+                      onChange={(v) =>
+                        patch((d) => {
+                          const next = v ?? 100
+                          d.organizationBoundary.consolidationPercent = next
+                          d.organizationBoundary.ownershipSharePercent = next
+                        })
+                      }
+                      hint="Your equity share in this facility — every Scope 1 bucket is scaled by this percentage"
+                    />
+                  </div>
+                ) : (
+                  <p className="form-sub" style={{ marginTop: 6 }}>
+                    Under <b>{p.organizationBoundary.boundaryMethod.toLowerCase().replace('_', ' ')}</b>, 100% of the
+                    facility's Scope 1 is reported. Switch to <b>Equity share</b> if you only consolidate your share.
+                  </p>
+                )}
               </div>
-              <div className="field-row">
-                <NumField
-                  label="Ownership share %"
-                  step="0.01"
-                  value={p.organizationBoundary.ownershipSharePercent}
-                  onChange={(v) => patch((d) => (d.organizationBoundary.ownershipSharePercent = v ?? 100))}
-                  hint="Default 100"
-                />
-                <NumField
-                  label="Consolidation %"
-                  step="0.01"
-                  value={p.organizationBoundary.consolidationPercent}
-                  onChange={(v) => patch((d) => (d.organizationBoundary.consolidationPercent = v ?? 100))}
-                  hint="Default 100"
-                />
+
+              <div className="form-card contact-card">
+                <h2>Primary contact</h2>
+                <p className="form-sub">
+                  Who is preparing this inventory? We save these with the report so the right person can be
+                  followed up with on queries or assurance.
+                </p>
+                <div className="field-row">
+                  <label className="field">
+                    Contact name<span className="required-mark">*</span>
+                    <input
+                      value={o.contactName ?? ''}
+                      placeholder="e.g. Anita Sharma"
+                      onChange={(e) => patch((d) => (d.organization.contactName = e.target.value))}
+                    />
+                    {show && err.contactName && <div className="field-error">Contact name is required.</div>}
+                  </label>
+                  <label className="field">
+                    Work email<span className="required-mark">*</span>
+                    <input
+                      type="email"
+                      value={o.contactEmail ?? ''}
+                      placeholder="name@company.com"
+                      onChange={(e) => patch((d) => (d.organization.contactEmail = e.target.value))}
+                    />
+                    {show && err.contactEmail && (
+                      <div className="field-error">A valid work email is required.</div>
+                    )}
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label className="field">
+                    Phone (with country code)
+                    <input
+                      value={o.contactPhone ?? ''}
+                      placeholder="+91 98xxxxxxxx"
+                      onChange={(e) => patch((d) => (d.organization.contactPhone = e.target.value))}
+                    />
+                  </label>
+                  <label className="field">
+                    Role / designation
+                    <input
+                      value={o.contactRole ?? ''}
+                      placeholder="e.g. Head of Sustainability"
+                      onChange={(e) => patch((d) => (d.organization.contactRole = e.target.value))}
+                    />
+                  </label>
+                </div>
               </div>
-            </div>
-            <div className="step-footer">
-              <button className="btn ghost" onClick={() => setStep(1)}>
-                Back
-              </button>
-              <button className="btn primary" onClick={() => setStep(3)}>
-                Continue
-              </button>
-            </div>
-          </section>
-        )}
+
+              <div className="step-footer">
+                <button className="btn ghost" onClick={() => setStep(1)}>
+                  Back
+                </button>
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    setStep2Tried(true)
+                    if (!invalid) setStep(3)
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+              {show && invalid && (
+                <p className="field-error" style={{ marginTop: 6 }}>
+                  Please complete the required fields above before continuing.
+                </p>
+              )}
+            </section>
+          )
+        })()}
 
         {step === 3 && (
           <section className="step-page active">
@@ -454,19 +591,46 @@ export function Scope1Wizard() {
               <h2>Facility &amp; reporting period</h2>
               <div className="field-row">
                 <label className="field">
-                  Facility name
+                  Facility name<span className="required-mark">*</span>
                   <input
                     value={p.facility.name}
                     placeholder="Plant 1 - Maharashtra"
                     onChange={(e) => patch((d) => (d.facility.name = e.target.value))}
                   />
+                  {step3Tried && !facilityValid && (
+                    <div className="field-error">Facility name is required.</div>
+                  )}
                 </label>
                 <label className="field">
                   Facility type
                   <select
                     value={p.facility.facilityType}
                     onChange={(e) =>
-                      patch((d) => (d.facility.facilityType = e.target.value as InputPayload['facility']['facilityType']))
+                      patch((d) => {
+                        const next = e.target.value as InputPayload['facility']['facilityType']
+                        d.facility.facilityType = next
+                        const reasons = { ...(d.sourceApplicability.exclusionReasons ?? {}) }
+                        const kilnSources: Array<keyof typeof d.sourceApplicability> = [
+                          'clinkerCalcination',
+                          'bypassDust',
+                          'ckd',
+                          'rawMealToc',
+                        ]
+                        if (next === 'GRINDING_UNIT') {
+                          for (const s of kilnSources) {
+                            d.sourceApplicability[s] = false as never
+                            reasons[s as string] = 'Grinding unit has no kiln'
+                          }
+                        } else {
+                          for (const s of kilnSources) {
+                            d.sourceApplicability[s] = true as never
+                            if (reasons[s as string] === 'Grinding unit has no kiln') {
+                              delete reasons[s as string]
+                            }
+                          }
+                        }
+                        d.sourceApplicability.exclusionReasons = reasons
+                      })
                     }
                   >
                     <option value="INTEGRATED_CEMENT">Integrated cement plant</option>
@@ -570,10 +734,21 @@ export function Scope1Wizard() {
               <button className="btn ghost" onClick={() => setStep(2)}>
                 Back
               </button>
-              <button className="btn primary" onClick={() => setStep(4)}>
+              <button
+                className="btn primary"
+                onClick={() => {
+                  setStep3Tried(true)
+                  if (facilityValid) setStep(4)
+                }}
+              >
                 Continue to activity data
               </button>
             </div>
+            {step3Tried && !facilityValid && (
+              <p className="field-error" style={{ marginTop: 6 }}>
+                Please complete the required fields above before continuing.
+              </p>
+            )}
           </section>
         )}
 
@@ -670,13 +845,30 @@ export function Scope1Wizard() {
 
               {cat === 'stationary' && (
                 <>
-                  <FuelTable title="Kiln fuels" entries={ad.kilnFuels} trace={trace} onChange={(rows) => patch((d) => (d.activityData.kilnFuels = rows))} />
-                  <FuelTable title="Non-kiln fossil fuels" entries={ad.nonKilnFuels} trace={trace} onChange={(rows) => patch((d) => (d.activityData.nonKilnFuels = rows))} />
+                  <FuelTable
+                    title="Kiln fuels"
+                    entries={ad.kilnFuels}
+                    trace={trace}
+                    method={ms.fuelCombustionMethod}
+                    onChange={(rows) => patch((d) => (d.activityData.kilnFuels = rows))}
+                  />
+                  <FuelTable
+                    title="Non-kiln fossil fuels"
+                    entries={ad.nonKilnFuels}
+                    trace={trace}
+                    method={ms.fuelCombustionMethod}
+                    onChange={(rows) => patch((d) => (d.activityData.nonKilnFuels = rows))}
+                  />
                 </>
               )}
 
               {cat === 'mobile' && (
-                <MobileTable entries={ad.mobile} trace={trace} onChange={(rows) => patch((d) => (d.activityData.mobile = rows))} />
+                <MobileTable
+                  entries={ad.mobile}
+                  trace={trace}
+                  method={ms.mobileCombustionMethod}
+                  onChange={(rows) => patch((d) => (d.activityData.mobile = rows))}
+                />
               )}
 
               {cat === 'fugitive' && (
@@ -700,12 +892,12 @@ export function Scope1Wizard() {
               <div className="form-card">
                 <h2>Live validation</h2>
                 {live.errors.map((e, i) => (
-                  <p key={`e${i}`} className="form-sub" style={{ color: '#b3261e' }}>
+                  <p key={`e${i}`} className="form-sub text-error">
                     ⛔ {e.code} — {e.message}
                   </p>
                 ))}
                 {live.warnings.map((w, i) => (
-                  <p key={`w${i}`} className="form-sub" style={{ color: '#9a6700' }}>
+                  <p key={`w${i}`} className="form-sub text-warn">
                     ⚠ {w.code} — {w.message}
                   </p>
                 ))}
@@ -748,29 +940,30 @@ export function Scope1Wizard() {
 function LiveTotals({ live }: { live: CalculationResult | null }) {
   if (!live) return null
   const c = live.scope1.components
-  const items: { k: string; v: number; unit?: string }[] = [
-    { k: 'Gross Scope 1', v: live.scope1.grossScope1CO2Tonnes, unit: 'tCO2e' },
-    { k: 'Process - clinker calcination', v: c.clinkerCalcinationCO2Tonnes },
-    { k: 'Process - bypass dust', v: c.bypassDustCO2Tonnes },
-    { k: 'Process - CKD', v: c.ckdCO2Tonnes },
-    { k: 'Process - raw meal TOC', v: c.rawMealTocCO2Tonnes },
+  const items: { k: string; v: number; unit?: string; headline?: boolean }[] = [
+    { k: 'Gross Scope 1', v: live.scope1.grossScope1CO2Tonnes, unit: 'tCO2e', headline: true },
+    { k: 'Process — clinker calcination', v: c.clinkerCalcinationCO2Tonnes },
+    { k: 'Process — bypass dust', v: c.bypassDustCO2Tonnes },
+    { k: 'Process — CKD', v: c.ckdCO2Tonnes },
+    { k: 'Process — raw meal TOC', v: c.rawMealTocCO2Tonnes },
     { k: 'Conventional kiln fuel', v: c.conventionalKilnFuelCO2Tonnes },
     { k: 'Alt. fossil kiln fuel', v: c.alternativeFossilKilnFuelCO2Tonnes },
     { k: 'Non-kiln fossil', v: c.nonKilnFossilCO2Tonnes },
     { k: 'Mobile combustion', v: c.mobileCombustionCO2Tonnes },
-    { k: 'Fugitive', v: c.fugitiveCO2eTonnes },
+    { k: 'Fugitive', v: c.fugitiveCO2eTonnes, unit: 'tCO2e' },
     { k: 'Biomass CO2 memo (excluded)', v: live.memoItems.biomassCO2Tonnes },
-    { k: 'CH4/N2O addendum (separate)', v: live.nonCsiCombustionGhg.ch4N2oCO2eTonnes },
+    { k: 'CH4 / N2O addendum (separate)', v: live.nonCsiCombustionGhg.ch4N2oCO2eTonnes, unit: 'tCO2e' },
   ]
   return (
-    <div className="form-card" style={{ background: '#f6f9f7', borderColor: '#d7e6dd' }}>
-      <h2 style={{ marginTop: 0 }}>Live results (updates as you type)</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 8 }}>
-        {items.map(({ k, v, unit }) => (
-          <div key={k} style={{ padding: '6px 10px', background: '#fff', border: '1px solid #e6ebef', borderRadius: 6 }}>
-            <div style={{ fontSize: 10, color: '#5a6678', textTransform: 'uppercase', letterSpacing: 0.3 }}>{k}</div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>
-              {fmt.format(v)} <span style={{ fontSize: 10, color: '#5a6678' }}>{unit ?? 'tCO2'}</span>
+    <div className="live-totals-strip">
+      <h3>Live results — updates as you type</h3>
+      <div className="live-totals-grid">
+        {items.map(({ k, v, unit, headline }) => (
+          <div key={k} className={headline ? 'live-cell live-cell-headline' : 'live-cell'}>
+            <div className="live-cell-label">{k}</div>
+            <div className="live-cell-value">
+              {fmt.format(v)}
+              <span className="live-cell-unit">{unit ?? 'tCO2'}</span>
             </div>
           </div>
         ))}
@@ -781,11 +974,11 @@ function LiveTotals({ live }: { live: CalculationResult | null }) {
 
 /* ----------------------------- Row preview & badge ---------------------------- */
 
-function RowPreview({ co2, label }: { co2: number | null; label: string }) {
+function RowPreview({ co2 }: { co2: number | null }) {
   return (
-    <div style={{ fontSize: 11, color: '#5a6678', marginTop: 4 }}>
-      {label}: <b style={{ color: '#0b6b3a' }}>{co2 === null ? '—' : fmt4.format(co2) + ' tCO2e'}</b>
-    </div>
+    <span className="row-co2-chip" title="Live row CO2 (recalculated as you type)">
+      {co2 === null ? '—' : fmt4.format(co2)} <small>tCO2e live</small>
+    </span>
   )
 }
 
@@ -795,13 +988,23 @@ function FuelTable({
   title,
   entries,
   trace,
+  method,
   onChange,
 }: {
   title: string
   entries: FuelEntry[]
   trace: TraceEntry[] | undefined
+  method: FuelCombustionMethod
   onChange: (rows: FuelEntry[]) => void
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  function toggle(id: string) {
+    setExpanded((s) => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
   function add() {
     onChange([
       ...entries,
@@ -828,84 +1031,158 @@ function FuelTable({
   return (
     <div className="form-card">
       <h2>{title}</h2>
-      {entries.length === 0 && <p className="form-sub">No fuel rows yet.</p>}
-      {entries.map((e) => {
+      {entries.length === 0 && <p className="form-sub">No fuel rows yet — click <b>Add fuel</b> to start.</p>}
+      {entries.map((e, i) => {
         const rowCO2 = fuelRowCO2(trace, e.label)
+        const hasOverride =
+          e.lhvGjPerUnit != null ||
+          e.co2EfKgPerGj != null ||
+          e.ch4EfKgPerGj != null ||
+          e.n2oEfKgPerGj != null ||
+          e.biomassFraction != null ||
+          !!e.overrideReason ||
+          !!e.evidenceReference
+        const isOpen = expanded.has(e.id) || hasOverride
         return (
-          <div key={e.id} style={{ borderTop: '1px solid #eef2f5', paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <strong style={{ fontSize: 12 }}>{e.label || '(unnamed)'}</strong>
+          <div key={e.id} className="entry-card">
+            <div className="entry-card-head">
+              <div className="entry-card-head-left">
+                <span className="entry-num">#{i + 1}</span>
+                <span className="entry-title">{e.label || '(unnamed fuel)'}</span>
                 {fuelBadge(e.category)}
+                <RowPreview co2={rowCO2} />
               </div>
-              <button className="icon-button" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
-                <Trash2 size={15} />
+              <button className="entry-delete" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
+                <Trash2 size={13} /> Remove
               </button>
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <label className="field">
-                Label
-                <input value={e.label} onChange={(ev) => upd(e.id, (f) => (f.label = ev.target.value))} />
-              </label>
-              <label className="field">
-                Fuel
-                <select value={e.fuelCode} onChange={(ev) => upd(e.id, (f) => (f.fuelCode = ev.target.value))}>
-                  {FUEL_CODES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Category
-                <select
-                  value={e.category}
-                  onChange={(ev) => upd(e.id, (f) => (f.category = ev.target.value as FuelEntry['category']))}
-                >
-                  <option value="CONVENTIONAL_FOSSIL">Conventional fossil</option>
-                  <option value="ALTERNATIVE_FOSSIL">Alternative fossil</option>
-                  <option value="MIXED">Mixed (fossil + biomass)</option>
-                  <option value="BIOMASS">Biomass</option>
-                </select>
-              </label>
-              <NumField label="Quantity" unit={e.quantityUnit} value={e.quantity} onChange={(v) => upd(e.id, (f) => (f.quantity = v))} />
+
+            <div className="entry-card-section">
+              <div className="entry-card-section-label">Basics</div>
+              <div className="field-row">
+                <label className="field">
+                  Label
+                  <input value={e.label} onChange={(ev) => upd(e.id, (f) => (f.label = ev.target.value))} />
+                </label>
+                <label className="field">
+                  Fuel
+                  <select value={e.fuelCode} onChange={(ev) => upd(e.id, (f) => (f.fuelCode = ev.target.value))}>
+                    {FUEL_CODES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  Category
+                  <select
+                    value={e.category}
+                    onChange={(ev) => upd(e.id, (f) => (f.category = ev.target.value as FuelEntry['category']))}
+                  >
+                    <option value="CONVENTIONAL_FOSSIL">Conventional fossil</option>
+                    <option value="ALTERNATIVE_FOSSIL">Alternative fossil</option>
+                    <option value="MIXED">Mixed (fossil + biomass)</option>
+                    <option value="BIOMASS">Biomass</option>
+                  </select>
+                </label>
+                <NumField label="Quantity" unit={e.quantityUnit} value={e.quantity} onChange={(v) => upd(e.id, (f) => (f.quantity = v))} />
+              </div>
+              {method === 'CARBON_CONTENT_BASED' && (
+                <div className="field-row">
+                  <NumField
+                    label="Carbon content fraction"
+                    step="0.0001"
+                    value={e.carbonContentFraction ?? null}
+                    onChange={(v) => upd(e.id, (f) => (f.carbonContentFraction = v))}
+                    hint="0–1; e.g. petcoke ≈ 0.85"
+                  />
+                </div>
+              )}
+              {method === 'DIRECT_MEASUREMENT' && (
+                <div className="field-row">
+                  <NumField
+                    label="Direct measured CO2"
+                    unit="tCO2"
+                    value={e.directCo2Tonnes ?? null}
+                    onChange={(v) => upd(e.id, (f) => (f.directCo2Tonnes = v))}
+                    hint="From CEMS / metered emissions"
+                  />
+                </div>
+              )}
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <NumField label="LHV override" unit="GJ/unit" step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (f) => (f.lhvGjPerUnit = v))} />
-              <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.co2EfKgPerGj = v))} />
-              <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.ch4EfKgPerGj = v))} />
-              <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.n2oEfKgPerGj = v))} />
-              <NumField label="Biomass frac" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} />
+
+            <button className="advanced-toggle" onClick={() => toggle(e.id)}>
+              {isOpen ? '▴' : '▾'} Advanced overrides {hasOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
+            </button>
+
+            {isOpen && (
+              <>
+                <div className="entry-card-section">
+                  <div className="entry-card-section-label">Factor overrides (blank = use library default)</div>
+                  {method === 'ENERGY_BASED' && (
+                    <>
+                      <div className="field-row">
+                        <NumField label="LHV override" unit="GJ/unit" step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (f) => (f.lhvGjPerUnit = v))} />
+                        <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.co2EfKgPerGj = v))} />
+                        <NumField label="Biomass fraction" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} />
+                      </div>
+                      <div className="field-row">
+                        <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.ch4EfKgPerGj = v))} />
+                        <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.n2oEfKgPerGj = v))} />
+                      </div>
+                    </>
+                  )}
+                  {method !== 'ENERGY_BASED' && (
+                    <div className="field-row">
+                      <NumField label="Biomass fraction" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} hint="0–1" />
+                    </div>
+                  )}
+                </div>
+                <div className="entry-card-section">
+                  <div className="entry-card-section-label">Audit</div>
+                  <div className="field-row">
+                    <label className="field" style={{ gridColumn: 'span 2' }}>
+                      Override reason
+                      <input
+                        value={e.overrideReason ?? ''}
+                        placeholder="Required when any factor on this row is overridden"
+                        onChange={(ev) => upd(e.id, (f) => (f.overrideReason = ev.target.value))}
+                      />
+                    </label>
+                    <label className="field">
+                      Evidence reference
+                      <input
+                        value={e.evidenceReference ?? ''}
+                        placeholder="e.g. ERP fuel report 2026"
+                        onChange={(ev) => upd(e.id, (f) => (f.evidenceReference = ev.target.value))}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="entry-formula">
+              {method === 'ENERGY_BASED' && (
+                <>Formula: quantity × LHV ÷ 1000 × CO2 EF = tCO2 &nbsp;·&nbsp; fossil part → Scope 1, biomass fraction → memo</>
+              )}
+              {method === 'CARBON_CONTENT_BASED' && (
+                <>Formula: quantity (t) × carbon content fraction × (44/12) = tCO2</>
+              )}
+              {method === 'DIRECT_MEASUREMENT' && (
+                <>
+                  Formula: directly metered tCO2 (e.g. from CEMS). <b>Note:</b> the CH4/N2O addendum needs
+                  a fuel energy basis and is therefore not computed for direct-measurement rows.
+                </>
+              )}
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <label className="field" style={{ flex: 2 }}>
-                Override reason
-                <input
-                  value={e.overrideReason ?? ''}
-                  placeholder="Required when any factor on this row is overridden"
-                  onChange={(ev) => upd(e.id, (f) => (f.overrideReason = ev.target.value))}
-                />
-              </label>
-              <label className="field" style={{ flex: 2 }}>
-                Evidence reference
-                <input
-                  value={e.evidenceReference ?? ''}
-                  placeholder="e.g. ERP fuel report 2026 / lab cert no."
-                  onChange={(ev) => upd(e.id, (f) => (f.evidenceReference = ev.target.value))}
-                />
-              </label>
-            </div>
-            <small className="form-sub">Formula: quantity × LHV ÷ 1000 × CO2 EF = tCO2 (fossil part counts in Scope 1; biomass fraction goes to the memo).</small>
-            <RowPreview co2={rowCO2} label="Live row CO2" />
           </div>
         )
       })}
-      <div style={{ marginTop: 8 }}>
-        <button className="btn ghost" onClick={add}>
-          <Plus size={15} /> Add fuel
-        </button>
-      </div>
+      <button className="add-entry-btn" onClick={add}>
+        <Plus size={15} /> Add fuel
+      </button>
     </div>
   )
 }
@@ -915,12 +1192,22 @@ function FuelTable({
 function MobileTable({
   entries,
   trace,
+  method,
   onChange,
 }: {
   entries: MobileEntry[]
   trace: TraceEntry[] | undefined
+  method: MobileCombustionMethod
   onChange: (rows: MobileEntry[]) => void
 }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  function toggle(id: string) {
+    setExpanded((s) => {
+      const n = new Set(s)
+      n.has(id) ? n.delete(id) : n.add(id)
+      return n
+    })
+  }
   function add() {
     onChange([
       ...entries,
@@ -947,98 +1234,185 @@ function MobileTable({
   return (
     <div className="form-card">
       <h2>Mobile combustion (owned / controlled = Scope 1)</h2>
-      {entries.length === 0 && <p className="form-sub">No mobile equipment yet.</p>}
-      {entries.map((e) => {
+      {entries.length === 0 && (
+        <p className="form-sub">No mobile equipment yet — click <b>Add mobile equipment</b> to start.</p>
+      )}
+      {entries.map((e, i) => {
         const rowCO2 = mobileRowCO2(trace, e.label)
         const isNonCanonical = e.fuelCode === 'diesel' && e.quantityUnit !== 'L'
+        const hasOverride =
+          e.lhvGjPerUnit != null ||
+          e.co2EfKgPerGj != null ||
+          e.ch4EfKgPerGj != null ||
+          e.n2oEfKgPerGj != null ||
+          !!e.overrideReason ||
+          !!e.evidenceReference
+        const isOpen = expanded.has(e.id) || hasOverride || isNonCanonical
         return (
-          <div key={e.id} style={{ borderTop: '1px solid #eef2f5', paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <strong style={{ fontSize: 12 }}>{e.label || '(unnamed)'}</strong>
+          <div key={e.id} className="entry-card">
+            <div className="entry-card-head">
+              <div className="entry-card-head-left">
+                <span className="entry-num">#{i + 1}</span>
+                <span className="entry-title">{e.label || '(unnamed mobile)'}</span>
                 {mobileBadge(e.ownership)}
+                <RowPreview co2={rowCO2} />
               </div>
-              <button className="icon-button" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
-                <Trash2 size={15} />
+              <button className="entry-delete" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
+                <Trash2 size={13} /> Remove
               </button>
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <label className="field">
-                Label
-                <input value={e.label} onChange={(ev) => upd(e.id, (m) => (m.label = ev.target.value))} />
-              </label>
-              <label className="field">
-                Ownership
-                <select
-                  value={e.ownership}
-                  onChange={(ev) => upd(e.id, (m) => (m.ownership = ev.target.value as MobileEntry['ownership']))}
-                >
-                  <option value="OWNED_CONTROLLED">Owned / controlled (Scope 1)</option>
-                  <option value="THIRD_PARTY">Third-party (excluded)</option>
-                </select>
-              </label>
-              <label className="field">
-                Fuel
-                <select value={e.fuelCode} onChange={(ev) => upd(e.id, (m) => (m.fuelCode = ev.target.value))}>
-                  {['diesel', 'natural_gas', 'heavy_fuel_oil'].map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Unit
-                <select
-                  value={e.quantityUnit}
-                  onChange={(ev) => upd(e.id, (m) => (m.quantityUnit = ev.target.value))}
-                >
-                  {MOBILE_UNITS.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <NumField label="Fuel quantity" unit={e.quantityUnit} value={e.quantity} onChange={(v) => upd(e.id, (m) => (m.quantity = v))} />
+
+            <div className="entry-card-section">
+              <div className="entry-card-section-label">Basics</div>
+              <div className="field-row">
+                <label className="field">
+                  Label
+                  <input value={e.label} onChange={(ev) => upd(e.id, (m) => (m.label = ev.target.value))} />
+                </label>
+                <label className="field">
+                  Ownership
+                  <select
+                    value={e.ownership}
+                    onChange={(ev) => upd(e.id, (m) => (m.ownership = ev.target.value as MobileEntry['ownership']))}
+                  >
+                    <option value="OWNED_CONTROLLED">Owned / controlled (Scope 1)</option>
+                    <option value="THIRD_PARTY">Third-party (excluded)</option>
+                  </select>
+                </label>
+                <label className="field">
+                  Fuel
+                  <select value={e.fuelCode} onChange={(ev) => upd(e.id, (m) => (m.fuelCode = ev.target.value))}>
+                    {['diesel', 'natural_gas', 'heavy_fuel_oil'].map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="field-row">
+                <label className="field">
+                  Unit
+                  <select
+                    value={e.quantityUnit}
+                    onChange={(ev) => upd(e.id, (m) => (m.quantityUnit = ev.target.value))}
+                  >
+                    {MOBILE_UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {method === 'FUEL_BASED' && (
+                  <NumField
+                    label="Fuel quantity"
+                    unit={e.quantityUnit}
+                    value={e.quantity}
+                    onChange={(v) => upd(e.id, (m) => (m.quantity = v))}
+                  />
+                )}
+                {method === 'EQUIPMENT_HOURS_BASED' && (
+                  <>
+                    <NumField
+                      label="Operating hours"
+                      unit="hrs"
+                      value={e.operatingHours ?? null}
+                      onChange={(v) => upd(e.id, (m) => (m.operatingHours = v))}
+                    />
+                    <NumField
+                      label="Consumption rate"
+                      unit={`${e.quantityUnit}/hr`}
+                      step="0.0001"
+                      value={e.consumptionRatePerHour ?? null}
+                      onChange={(v) => upd(e.id, (m) => (m.consumptionRatePerHour = v))}
+                    />
+                  </>
+                )}
+                {method === 'DISTANCE_BASED' && (
+                  <>
+                    <NumField
+                      label="Distance"
+                      unit="km"
+                      value={e.distanceKm ?? null}
+                      onChange={(v) => upd(e.id, (m) => (m.distanceKm = v))}
+                    />
+                    <NumField
+                      label="Fuel per km"
+                      unit={`${e.quantityUnit}/km`}
+                      step="0.0001"
+                      value={e.fuelPerKm ?? null}
+                      onChange={(v) => upd(e.id, (m) => (m.fuelPerKm = v))}
+                    />
+                  </>
+                )}
+              </div>
+              {isNonCanonical && (
+                <div className="inline-warn">
+                  Library LHV for diesel is per L. You picked <b>{e.quantityUnit}</b> — supply an LHV in GJ/
+                  {e.quantityUnit} in <b>Advanced overrides</b> below.
+                </div>
+              )}
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <NumField label="LHV override" unit={`GJ/${e.quantityUnit}`} step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (m) => (m.lhvGjPerUnit = v))} hint={isNonCanonical ? 'Required: library LHV is per L' : ''} />
-              <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.co2EfKgPerGj = v))} />
-              <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.ch4EfKgPerGj = v))} />
-              <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.n2oEfKgPerGj = v))} />
+
+            <button className="advanced-toggle" onClick={() => toggle(e.id)}>
+              {isOpen ? '▴' : '▾'} Advanced overrides {hasOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
+            </button>
+
+            {isOpen && (
+              <>
+                <div className="entry-card-section">
+                  <div className="entry-card-section-label">Factor overrides (blank = library default)</div>
+                  <div className="field-row">
+                    <NumField label="LHV override" unit={`GJ/${e.quantityUnit}`} step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (m) => (m.lhvGjPerUnit = v))} />
+                    <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.co2EfKgPerGj = v))} />
+                  </div>
+                  <div className="field-row">
+                    <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.ch4EfKgPerGj = v))} />
+                    <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.n2oEfKgPerGj = v))} />
+                  </div>
+                </div>
+                <div className="entry-card-section">
+                  <div className="entry-card-section-label">Audit</div>
+                  <div className="field-row">
+                    <label className="field" style={{ gridColumn: 'span 2' }}>
+                      Override reason
+                      <input
+                        value={e.overrideReason ?? ''}
+                        placeholder="Required when LHV/EF differs from library default"
+                        onChange={(ev) => upd(e.id, (m) => (m.overrideReason = ev.target.value))}
+                      />
+                    </label>
+                    <label className="field">
+                      Evidence reference
+                      <input
+                        value={e.evidenceReference ?? ''}
+                        placeholder="e.g. fleet fuel card statement"
+                        onChange={(ev) => upd(e.id, (m) => (m.evidenceReference = ev.target.value))}
+                      />
+                    </label>
+                  </div>
+                </div>
+              </>
+            )}
+
+            <div className="entry-formula">
+              {method === 'FUEL_BASED' && (
+                <>Formula: Fuel qty ({e.quantityUnit}) × LHV (GJ/{e.quantityUnit}) ÷ 1000 × CO2 EF (kg/GJ) = tCO2</>
+              )}
+              {method === 'EQUIPMENT_HOURS_BASED' && (
+                <>Formula: hrs × consumption ({e.quantityUnit}/hr) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2</>
+              )}
+              {method === 'DISTANCE_BASED' && (
+                <>Formula: km × fuel-per-km ({e.quantityUnit}/km) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2</>
+              )}
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <label className="field" style={{ flex: 2 }}>
-                Override reason
-                <input
-                  value={e.overrideReason ?? ''}
-                  placeholder="Required when LHV/EF differs from library default"
-                  onChange={(ev) => upd(e.id, (m) => (m.overrideReason = ev.target.value))}
-                />
-              </label>
-              <label className="field" style={{ flex: 2 }}>
-                Evidence reference
-                <input
-                  value={e.evidenceReference ?? ''}
-                  placeholder="e.g. fleet fuel card statement / supplier invoice"
-                  onChange={(ev) => upd(e.id, (m) => (m.evidenceReference = ev.target.value))}
-                />
-              </label>
-            </div>
-            <small className="form-sub">
-              Formula: Fuel quantity ({e.quantityUnit}) × LHV (GJ/{e.quantityUnit}) ÷ 1000 × CO2 EF (kg/GJ) = tCO2.
-              {isNonCanonical ? ' Library LHV is per L — supply an LHV in GJ/' + e.quantityUnit + ' when using a different unit.' : ''}
-            </small>
-            <RowPreview co2={rowCO2} label="Live row CO2" />
           </div>
         )
       })}
-      <div style={{ marginTop: 8 }}>
-        <button className="btn ghost" onClick={add}>
-          <Plus size={15} /> Add mobile equipment
-        </button>
-      </div>
+      <button className="add-entry-btn" onClick={add}>
+        <Plus size={15} /> Add mobile equipment
+      </button>
     </div>
   )
 }
@@ -1098,71 +1472,148 @@ function FugitiveTable({
     <div className="form-card">
       <h2>Fugitive emissions (refrigerant leakage, SF6 switchgear)</h2>
       <p className="form-sub">Direct Scope 1 release of high-GWP gases. Reported as CO2e using GWP ({gwpSet}).</p>
-      {entries.length === 0 && <p className="form-sub">No fugitive sources yet.</p>}
-      {entries.map((e) => {
+      {entries.length === 0 && (
+        <p className="form-sub">No fugitive sources yet — click <b>Add fugitive source</b> to start.</p>
+      )}
+      {entries.map((e, i) => {
         const rowCO2 = fugitiveRowCO2(trace, e.label)
         const libGwp = gwpByGas[e.gasCode]
         const mismatch = inlineLabelMismatch(e.label, e.gasCode)
         return (
-          <div key={e.id} style={{ borderTop: '1px solid #eef2f5', paddingTop: 10, marginTop: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <strong style={{ fontSize: 12 }}>{e.label || '(unnamed)'}</strong>
+          <div key={e.id} className="entry-card">
+            <div className="entry-card-head">
+              <div className="entry-card-head-left">
+                <span className="entry-num">#{i + 1}</span>
+                <span className="entry-title">{e.label || '(unnamed fugitive)'}</span>
                 {FUGITIVE_BADGE}
+                <RowPreview co2={rowCO2} />
               </div>
-              <button className="icon-button" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
-                <Trash2 size={15} />
+              <button className="entry-delete" onClick={() => onChange(entries.filter((x) => x.id !== e.id))}>
+                <Trash2 size={13} /> Remove
               </button>
             </div>
-            <div className="field-row" style={{ alignItems: 'flex-end' }}>
-              <label className="field">
-                Label
-                <input value={e.label} onChange={(ev) => upd(e.id, (g) => (g.label = ev.target.value))} />
-              </label>
-              <label className="field">
-                Gas
-                <select value={e.gasCode} onChange={(ev) => upd(e.id, (g) => (g.gasCode = ev.target.value))}>
-                  {GAS_CODES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <small className="form-sub">
-                  Library GWP ({gwpSet}): <b>{libGwp ? fmt.format(libGwp) : '—'}</b>
-                </small>
-              </label>
-              <NumField label="Quantity leaked / top-up" unit="kg" value={e.leakedKg} onChange={(v) => upd(e.id, (g) => (g.leakedKg = v))} />
-              <NumField label="GWP override" step="1" value={e.gwpOverride ?? null} onChange={(v) => upd(e.id, (g) => (g.gwpOverride = v))} hint="Blank = library GWP" />
+
+            <div className="entry-card-section">
+              <div className="entry-card-section-label">Basics</div>
+              <div className="field-row">
+                <label className="field">
+                  Label
+                  <input value={e.label} onChange={(ev) => upd(e.id, (g) => (g.label = ev.target.value))} />
+                </label>
+                <label className="field">
+                  Gas
+                  <select value={e.gasCode} onChange={(ev) => upd(e.id, (g) => (g.gasCode = ev.target.value))}>
+                    {GAS_CODES.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                  <small className="form-sub">
+                    Library GWP ({gwpSet}): <b>{libGwp ? fmt.format(libGwp) : '—'}</b>
+                  </small>
+                </label>
+                <NumField label="Quantity leaked / top-up" unit="kg" value={e.leakedKg} onChange={(v) => upd(e.id, (g) => (g.leakedKg = v))} />
+                <NumField label="GWP override" step="1" value={e.gwpOverride ?? null} onChange={(v) => upd(e.id, (g) => (g.gwpOverride = v))} hint="Blank = library GWP" />
+              </div>
             </div>
-            <label className="field">
-              Evidence reference
-              <input
-                value={e.evidenceReference ?? ''}
-                placeholder="e.g. AMC service report / refrigerant top-up log"
-                onChange={(ev) => upd(e.id, (g) => (g.evidenceReference = ev.target.value))}
-              />
-            </label>
+
+            <div className="entry-card-section">
+              <div className="entry-card-section-label">Audit</div>
+              <div className="field-row">
+                <label className="field" style={{ gridColumn: 'span 2' }}>
+                  GWP override reason
+                  <input
+                    value={e.overrideReason ?? ''}
+                    placeholder="Required when a GWP override is supplied (e.g. supplier blend GWP)"
+                    onChange={(ev) => upd(e.id, (g) => (g.overrideReason = ev.target.value))}
+                  />
+                </label>
+                <label className="field">
+                  Evidence reference
+                  <input
+                    value={e.evidenceReference ?? ''}
+                    placeholder="e.g. AMC service report / refrigerant log"
+                    onChange={(ev) => upd(e.id, (g) => (g.evidenceReference = ev.target.value))}
+                  />
+                </label>
+              </div>
+            </div>
+
             {mismatch && (
-              <p className="form-sub" style={{ color: '#9a6700' }}>
-                ⚠ Label mentions <b>{mismatch.toUpperCase()}</b> but the selected gas is <b>{e.gasCode.toUpperCase()}</b>. This can cause a major GWP error — please confirm.
-              </p>
+              <div className="inline-warn">
+                ⚠ Label mentions <b>{mismatch.toUpperCase()}</b> but the selected gas is{' '}
+                <b>{e.gasCode.toUpperCase()}</b>. This can cause a major GWP error — please confirm.
+              </div>
             )}
-            <small className="form-sub">Formula: leaked kg × GWP ÷ 1000 = tCO2e.</small>
-            <RowPreview co2={rowCO2} label="Live row CO2e" />
+
+            <div className="entry-formula">Formula: leaked kg × GWP ÷ 1000 = tCO2e</div>
           </div>
         )
       })}
-      <div style={{ marginTop: 8 }}>
-        <button className="btn ghost" onClick={add}>
-          <Plus size={15} /> Add fugitive source
-        </button>
-      </div>
+      <button className="add-entry-btn" onClick={add}>
+        <Plus size={15} /> Add fugitive source
+      </button>
     </div>
   )
 }
 
 /* ------------------------------ Override panel --------------------------- */
+
+/* ------------------------------- Modal ----------------------------------- */
+
+function Modal({
+  open,
+  title,
+  onClose,
+  children,
+}: {
+  open: boolean
+  title: string
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, onClose])
+  if (!open) return null
+  return (
+    <div className="modal-backdrop" onClick={onClose} role="presentation">
+      <div
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h3>{title}</h3>
+          <button className="modal-close" aria-label="Close" onClick={onClose}>
+            <X size={15} />
+          </button>
+        </div>
+        <div className="modal-body">{children}</div>
+        <div className="modal-footer">
+          <button className="modal-ok" onClick={onClose}>
+            Got it
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ----------------------- Customise factors (overrides) ------------------- */
 
 function OverridePanel({
   factors,
@@ -1173,13 +1624,28 @@ function OverridePanel({
   overrides: InputPayload['factorOverrides']
   onChange: (o: InputPayload['factorOverrides']) => void
 }) {
+  const [query, setQuery] = useState('')
+  const [onlyOver, setOnlyOver] = useState(false)
+  const [infoOpen, setInfoOpen] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+
+  const overrideCount = Object.keys(overrides).length
+  const q = query.trim().toLowerCase()
+  const visible = factors.filter((f) => {
+    if (onlyOver && !overrides[f.factorCode]) return false
+    if (!q) return true
+    return (
+      f.factorName.toLowerCase().includes(q) ||
+      f.factorCode.toLowerCase().includes(q) ||
+      f.source.toLowerCase().includes(q)
+    )
+  })
+
   function setOverride(code: string, value: Num, existingReason: string) {
     const next = { ...overrides }
     if (value === null) {
       delete next[code]
     } else {
-      // Zero is treated as an explicit zero override - require an extra confirmation
-      // because it's a high-impact, easy-to-mistype value.
       if (value === 0) {
         const ok =
           typeof window !== 'undefined' &&
@@ -1190,46 +1656,160 @@ function OverridePanel({
     }
     onChange(next)
   }
+  function clearOverride(code: string) {
+    const next = { ...overrides }
+    delete next[code]
+    onChange(next)
+  }
+  function setReason(code: string, reason: string) {
+    const next = { ...overrides }
+    if (next[code]) next[code] = { ...next[code], reason }
+    onChange(next)
+  }
+
   return (
     <div className="form-card">
-      <h2>Customise factors (consultant override)</h2>
-      <p className="form-sub">
-        Every default carries its source. Override any value with a reason - the override and its reason are recorded
-        in the factor snapshot of the report. <b>Setting an override to 0 is treated as a confirmed zero</b> and will
-        ask you to confirm.
+      <h2 style={{ display: 'inline-flex', alignItems: 'center' }}>
+        Customise factors
+        <button
+          className="info-btn"
+          aria-label="About customising factors"
+          title="Why this exists & when to use it"
+          onClick={() => setInfoOpen(true)}
+        >
+          <Info size={12} />
+        </button>
+      </h2>
+      <div className="customise-meta">
+        <span className="customise-meta-pill muted">{factors.length} factors in library</span>
+        {overrideCount > 0 ? (
+          <span className="customise-meta-pill">
+            {overrideCount} customised
+          </span>
+        ) : null}
+      </div>
+      <p className="form-sub" style={{ marginTop: 8 }}>
+        Replace a library default with plant- or supplier-specific data. The override value and reason are recorded in
+        the report&apos;s factor snapshot.
       </p>
-      {factors.map((f) => {
-        const ov = overrides[f.factorCode]
-        return (
-          <div className="field-row" key={f.factorCode} style={{ alignItems: 'flex-end' }}>
-            <label className="field" style={{ flex: 2 }}>
-              {f.factorName}
-              <small className="form-sub">
-                Default {f.value} {f.unit} · {f.source}
-              </small>
-            </label>
-            <NumField
-              label="Override value"
-              step="0.0001"
-              value={ov ? ov.value : null}
-              onChange={(v) => setOverride(f.factorCode, v, ov?.reason ?? '')}
-            />
-            <label className="field" style={{ flex: 2 }}>
-              Reason
-              <input
-                value={ov?.reason ?? ''}
-                placeholder="Why is the default being replaced?"
-                disabled={!ov}
-                onChange={(e) => {
-                  const next = { ...overrides }
-                  if (next[f.factorCode]) next[f.factorCode] = { ...next[f.factorCode], reason: e.target.value }
-                  onChange(next)
-                }}
-              />
-            </label>
+
+      <div className="customise-toolbar">
+        <div
+          style={{ position: 'relative', flex: 1, display: 'flex', alignItems: 'center', minWidth: 200 }}
+        >
+          <Search size={13} style={{ position: 'absolute', left: 12, color: 'var(--muted)' }} />
+          <input
+            className="customise-search"
+            style={{ paddingLeft: 32 }}
+            placeholder="Search factors by name, code, or source…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <button
+          className={`customise-filter ${onlyOver ? 'active' : ''}`}
+          onClick={() => setOnlyOver((v) => !v)}
+        >
+          {onlyOver ? '● Only customised' : 'Only customised'}
+        </button>
+      </div>
+
+      <div className="customise-list">
+        {visible.length === 0 && (
+          <div className="customise-empty">
+            {onlyOver
+              ? 'No customised factors yet.'
+              : 'No factors match your search.'}
           </div>
-        )
-      })}
+        )}
+        {visible.map((f) => {
+          const ov = overrides[f.factorCode]
+          const isOver = !!ov
+          const isOpen = isOver || expanded.has(f.factorCode)
+          return (
+            <div key={f.factorCode} className={`customise-row ${isOver ? 'is-overridden' : ''}`}>
+              <div className="customise-row-head">
+                <div>
+                  <div className="customise-row-name">{f.factorName}</div>
+                  <div className="customise-row-meta">
+                    Default <b>{f.value}</b> {f.unit} · {f.source}
+                  </div>
+                </div>
+                <div className="customise-row-actions">
+                  {isOver ? (
+                    <>
+                      <span className="customise-row-state">CUSTOMISED → {ov.value}</span>
+                      <button className="customise-reset" onClick={() => clearOverride(f.factorCode)}>
+                        Reset
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      className="customise-toggle"
+                      onClick={() =>
+                        setExpanded((s) => {
+                          const n = new Set(s)
+                          n.has(f.factorCode) ? n.delete(f.factorCode) : n.add(f.factorCode)
+                          return n
+                        })
+                      }
+                    >
+                      {isOpen ? 'Cancel' : 'Override'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {isOpen && (
+                <div className="customise-row-body">
+                  <div className="field-row">
+                    <NumField
+                      label="Override value"
+                      unit={f.unit}
+                      step="0.0001"
+                      value={ov ? ov.value : null}
+                      onChange={(v) => setOverride(f.factorCode, v, ov?.reason ?? '')}
+                    />
+                    <label className="field" style={{ gridColumn: 'span 2' }}>
+                      Reason (recorded in the factor snapshot)
+                      <input
+                        value={ov?.reason ?? ''}
+                        placeholder="e.g. Plant lab CaO 64.8%, certificate ref ABC/2026"
+                        disabled={!ov}
+                        onChange={(e) => setReason(f.factorCode, e.target.value)}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <Modal open={infoOpen} title="About customising factors" onClose={() => setInfoOpen(false)}>
+        <p>
+          The factor library ships with internationally recognised defaults. Override one only when you hold
+          higher-quality, plant- or supplier-specific data — and record the reason. Every change is preserved in the
+          report&apos;s factor snapshot, so the inventory stays fully audit-traceable.
+        </p>
+        <h4>Recommended when</h4>
+        <ul>
+          <li>You have lab-measured plant chemistry, calorific values or carbon content (IPCC Tier 3 data).</li>
+          <li>A supplier provides a verified emission factor or fuel composition.</li>
+          <li>An updated official factor applies for the reporting year (e.g. a newer national grid EF).</li>
+        </ul>
+        <h4>Standards followed</h4>
+        <ul>
+          <li>GHG Protocol Corporate Standard — emission-factor selection and data quality.</li>
+          <li>ISO 14064-1:2018 §8.2 — selecting and developing emission factors.</li>
+          <li>IPCC 2006 Guidelines — Tier 1 / 2 / 3 data hierarchy.</li>
+          <li>CSI Cement CO<sub>2</sub> Protocol v2 — plant-specific clinker chemistry where available.</li>
+        </ul>
+        <div className="modal-foot-note">
+          <b>Avoid otherwise.</b> Library defaults are cited and defensible; replacing them without evidence weakens
+          the inventory and may not pass third-party assurance.
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -1320,12 +1900,12 @@ function ResultsPage({
             Validation ({result.errors.length} errors · {result.warnings.length} warnings)
           </h2>
           {result.errors.map((e, i) => (
-            <p key={`e${i}`} className="form-sub" style={{ color: '#b3261e' }}>
+            <p key={`e${i}`} className="form-sub text-error">
               ⛔ {e.code} — {e.message}
             </p>
           ))}
           {result.warnings.map((w, i) => (
-            <p key={`w${i}`} className="form-sub" style={{ color: '#9a6700' }}>
+            <p key={`w${i}`} className="form-sub text-warn">
               ⚠ {w.code} — {w.message}
             </p>
           ))}
