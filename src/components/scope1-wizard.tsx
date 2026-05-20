@@ -70,6 +70,89 @@ const CATEGORIES: { key: Cat; label: string; icon: typeof Flame }[] = [
 const fmt = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2 })
 const fmt4 = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 4 })
 
+function sampleBharatCement(): InputPayload {
+  return {
+    calculationContext: {
+      calculationType: 'ANNUAL_INVENTORY',
+      reportingPeriod: { year: 2026, startDate: '2026-01-01', endDate: '2026-12-31' },
+      inventoryVersion: 'SAMPLE_V1',
+      gwpSet: 'AR6',
+    },
+    organization: {
+      name: 'Bharat Cement Ltd (sample)',
+      country: 'IN',
+      contactName: 'Anita Sharma',
+      contactEmail: 'anita.sharma@bharatcement.example',
+      contactPhone: '+91 98000 00000',
+      contactRole: 'Head of Sustainability',
+    },
+    facility: { name: 'Plant 1 — Rajasthan', facilityType: 'INTEGRATED_CEMENT', state: 'Rajasthan' },
+    organizationBoundary: {
+      boundaryMethod: 'OPERATIONAL_CONTROL',
+      ownershipSharePercent: 100,
+      consolidationPercent: 100,
+    },
+    sector: { sectorCode: 'CEMENT' },
+    methodSelections: {
+      processEmissionMethod: 'CSI_CLINKER_BASED',
+      clinkerEmissionFactorMethod: 'CSI_DEFAULT_525',
+      dustMethod: 'IPCC_2_PERCENT_FALLBACK',
+      tocMethod: 'CSI_DEFAULT_TOC',
+      fuelCombustionMethod: 'ENERGY_BASED',
+      mobileCombustionMethod: 'FUEL_BASED',
+      electricityMethod: 'LOCATION_BASED_SUPPORTING',
+      boughtClinkerMethod: 'NONE',
+      netReportingMethod: 'NONE',
+    },
+    sourceApplicability: {
+      clinkerCalcination: true,
+      bypassDust: true,
+      ckd: true,
+      rawMealToc: true,
+      kilnFuels: true,
+      nonKilnFuels: true,
+      mobile: true,
+      fugitive: true,
+      purchasedElectricity: false,
+      boughtClinker: false,
+      exclusionReasons: {
+        purchasedElectricity: 'Out of Scope 1 (Scope 2) - not collected in this calculator',
+        boughtClinker: 'Out of Scope 1 (Scope 3) - not collected in this calculator',
+      },
+    },
+    activityData: {
+      production: {
+        clinkerProducedTonnes: 1_200_000,
+        cementProducedTonnes: 1_800_000,
+        cementitiousProductTonnes: 1_900_000,
+      },
+      clinkerChemistry: { caoPercent: null, caoNonCarbonatePercent: null, mgoPercent: null, mgoNonCarbonatePercent: null },
+      dust: { ckdLeavingKilnTonnes: null, ckdCalcinationRate: null, bypassDustLeavingKilnTonnes: null, bypassDustCalcinationRate: null },
+      rawMeal: { rawMealToClinkerRatio: null, tocFraction: null },
+      kilnFuels: [
+        { id: 'k1', label: 'Kiln petcoke', fuelCode: 'petcoke', category: 'CONVENTIONAL_FOSSIL', quantity: 110_000, quantityUnit: 'tonne' },
+        { id: 'k2', label: 'Kiln coal', fuelCode: 'coal_bituminous', category: 'CONVENTIONAL_FOSSIL', quantity: 95_000, quantityUnit: 'tonne' },
+        { id: 'k3', label: 'Kiln tyres (alt fuel)', fuelCode: 'tyres', category: 'MIXED', quantity: 8_000, quantityUnit: 'tonne' },
+      ],
+      nonKilnFuels: [
+        { id: 'n1', label: 'DG set diesel', fuelCode: 'diesel', category: 'CONVENTIONAL_FOSSIL', quantity: 250_000, quantityUnit: 'L' },
+      ],
+      mobile: [
+        { id: 'm1', label: 'Haul trucks & loaders', ownership: 'OWNED_CONTROLLED', fuelCode: 'diesel', quantity: 480_000, quantityUnit: 'L' },
+      ],
+      fugitive: [
+        { id: 'g1', label: 'Plant AC / chillers', gasCode: 'r410a', leakedKg: 350 },
+        { id: 'g2', label: 'HV switchgear', gasCode: 'sf6', leakedKg: 12 },
+      ],
+      purchasedElectricity: { mwh: null, gridEfTco2PerMwh: null },
+      boughtClinker: { externalClinkerBoughtTonnes: null, externalClinkerSoldTonnes: null },
+      emissionRights: { acquiredTonnes: null },
+      usEpaFallback: { cementProducedTonnes: null, clinkerToCementRatio: null, clinkerEfTco2PerTonne: null },
+    },
+    factorOverrides: {},
+  }
+}
+
 function emptyPayload(): InputPayload {
   return {
     calculationContext: {
@@ -272,6 +355,24 @@ export function Scope1Wizard() {
     }
   }
 
+  async function loadSample() {
+    const sample = sampleBharatCement()
+    setP(sample)
+    setBusy(true)
+    try {
+      const r = await fetch('/api/v1/calculations/cement/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sample),
+      })
+      const data = await r.json()
+      setResult(data.result)
+      setStep(5)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function download(format: 'json' | 'xlsx' | 'pdf') {
     const r = await fetch('/api/v1/calculations/export', {
       method: 'POST',
@@ -404,6 +505,30 @@ export function Scope1Wizard() {
             <p className="step-sub">
               Cement is the first active methodology pack (CSI Cement CO2 Protocol). The engine is sector-extensible.
             </p>
+            <div
+              style={{
+                alignItems: 'center',
+                background: 'color-mix(in srgb, var(--purple) 6%, transparent)',
+                border: '1px dashed color-mix(in srgb, var(--purple) 40%, transparent)',
+                borderRadius: 12,
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 12,
+                justifyContent: 'space-between',
+                margin: '14px 0 18px',
+                padding: '12px 16px',
+              }}
+            >
+              <div style={{ color: 'var(--ink)' }}>
+                <b>First time here?</b>{' '}
+                <span style={{ color: 'var(--muted)' }}>
+                  Skip the data entry and see the calculator end‑to‑end with a sample cement plant.
+                </span>
+              </div>
+              <button className="add-entry-btn" onClick={loadSample} disabled={busy}>
+                {busy ? 'Loading…' : 'Try with sample data →'}
+              </button>
+            </div>
             <div className="sector-grid">
               <button className="sector-card selected">
                 <span className="icon">◭</span>
