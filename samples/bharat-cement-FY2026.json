@@ -1,0 +1,155 @@
+{
+  "calculationContext": {
+    "calculationType": "ANNUAL_INVENTORY",
+    "reportingPeriod": {
+      "year": 2026,
+      "startDate": "2026-01-01",
+      "endDate": "2026-12-31"
+    },
+    "inventoryVersion": "TEST_V1",
+    "gwpSet": "AR6"
+  },
+  "organization": {
+    "name": "Bharat Cement Ltd",
+    "country": "IN"
+  },
+  "facility": {
+    "name": "Plant 1 - Rajasthan",
+    "facilityType": "INTEGRATED_CEMENT"
+  },
+  "organizationBoundary": {
+    "boundaryMethod": "OPERATIONAL_CONTROL",
+    "ownershipSharePercent": 100,
+    "consolidationPercent": 100
+  },
+  "sector": {
+    "sectorCode": "CEMENT"
+  },
+  "methodSelections": {
+    "processEmissionMethod": "CSI_CLINKER_BASED",
+    "clinkerEmissionFactorMethod": "CSI_DEFAULT_525",
+    "dustMethod": "IPCC_2_PERCENT_FALLBACK",
+    "tocMethod": "CSI_DEFAULT_TOC",
+    "fuelCombustionMethod": "ENERGY_BASED",
+    "mobileCombustionMethod": "FUEL_BASED",
+    "electricityMethod": "LOCATION_BASED_SUPPORTING",
+    "boughtClinkerMethod": "NONE",
+    "netReportingMethod": "NONE"
+  },
+  "sourceApplicability": {
+    "clinkerCalcination": true,
+    "bypassDust": true,
+    "ckd": true,
+    "rawMealToc": true,
+    "kilnFuels": true,
+    "nonKilnFuels": true,
+    "mobile": true,
+    "fugitive": true,
+    "purchasedElectricity": false,
+    "boughtClinker": false,
+    "exclusionReasons": {
+      "purchasedElectricity": "Scope 2 - out of scope",
+      "boughtClinker": "Scope 3 - out of scope"
+    }
+  },
+  "activityData": {
+    "production": {
+      "clinkerProducedTonnes": 1200000,
+      "cementProducedTonnes": 1800000,
+      "cementitiousProductTonnes": 1900000
+    },
+    "clinkerChemistry": {
+      "caoPercent": null,
+      "caoNonCarbonatePercent": null,
+      "mgoPercent": null,
+      "mgoNonCarbonatePercent": null
+    },
+    "dust": {
+      "ckdLeavingKilnTonnes": null,
+      "ckdCalcinationRate": null,
+      "bypassDustLeavingKilnTonnes": null,
+      "bypassDustCalcinationRate": null
+    },
+    "rawMeal": {
+      "rawMealToClinkerRatio": null,
+      "tocFraction": null
+    },
+    "kilnFuels": [
+      {
+        "id": "k1",
+        "label": "Kiln petcoke",
+        "fuelCode": "petcoke",
+        "category": "CONVENTIONAL_FOSSIL",
+        "quantity": 110000,
+        "quantityUnit": "tonne"
+      },
+      {
+        "id": "k2",
+        "label": "Kiln coal",
+        "fuelCode": "coal_bituminous",
+        "category": "CONVENTIONAL_FOSSIL",
+        "quantity": 95000,
+        "quantityUnit": "tonne"
+      },
+      {
+        "id": "k3",
+        "label": "Kiln tyres (alt fuel)",
+        "fuelCode": "tyres",
+        "category": "MIXED",
+        "quantity": 8000,
+        "quantityUnit": "tonne"
+      }
+    ],
+    "nonKilnFuels": [
+      {
+        "id": "n1",
+        "label": "DG set diesel",
+        "fuelCode": "diesel",
+        "category": "CONVENTIONAL_FOSSIL",
+        "quantity": 250000,
+        "quantityUnit": "L"
+      }
+    ],
+    "mobile": [
+      {
+        "id": "m1",
+        "label": "Haul trucks & loaders",
+        "ownership": "OWNED_CONTROLLED",
+        "fuelCode": "diesel",
+        "quantity": 480000,
+        "quantityUnit": "L"
+      }
+    ],
+    "fugitive": [
+      {
+        "id": "g1",
+        "label": "Plant AC / chillers",
+        "gasCode": "r410a",
+        "leakedKg": 350
+      },
+      {
+        "id": "g2",
+        "label": "HV switchgear",
+        "gasCode": "sf6",
+        "leakedKg": 12
+      }
+    ],
+    "purchasedElectricity": {
+      "mwh": null,
+      "gridEfTco2PerMwh": null
+    },
+    "boughtClinker": {
+      "externalClinkerBoughtTonnes": null,
+      "externalClinkerSoldTonnes": null
+    },
+    "emissionRights": {
+      "acquiredTonnes": null
+    },
+    "usEpaFallback": {
+      "cementProducedTonnes": null,
+      "clinkerToCementRatio": null,
+      "clinkerEfTco2PerTonne": null
+    }
+  },
+  "factorOverrides": {}
+}

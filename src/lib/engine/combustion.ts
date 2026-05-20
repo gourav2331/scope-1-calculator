@@ -182,12 +182,16 @@ export function calculateFuel(
     ch4N2oCO2e = (ch4Kg * gwp.CH4 + n2oKg * gwp.N2O) / 1000
   }
 
+  const auditInputs: Record<string, number | string | null> = { ...traceInputs, biomassFraction }
+  if (entry.evidenceReference) auditInputs.evidenceReference = entry.evidenceReference
+  if (entry.overrideReason) auditInputs.overrideReason = entry.overrideReason
+
   ctx.addTrace({
     step: `Combustion CO2 - ${entry.label}`,
     category: scopeLabel,
     method,
     formula: traceFormula,
-    inputs: { ...traceInputs, biomassFraction },
+    inputs: auditInputs,
     factorSnapshots: ctx.resolver.list(),
     outputTonnesCO2: round(fossilCO2, 4),
   })

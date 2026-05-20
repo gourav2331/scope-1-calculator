@@ -75,6 +75,10 @@ export function calculateMobile(
       quantityUnit: entry.quantityUnit,
       lhvGjPerUnit: entry.lhvGjPerUnit,
       co2EfKgPerGj: entry.co2EfKgPerGj,
+      ch4EfKgPerGj: entry.ch4EfKgPerGj,
+      n2oEfKgPerGj: entry.n2oEfKgPerGj,
+      evidenceReference: entry.evidenceReference,
+      overrideReason: entry.overrideReason,
     }
 
     const o = calculateFuel(ctx, 'ENERGY_BASED', fuelEntry, 'MOBILE')

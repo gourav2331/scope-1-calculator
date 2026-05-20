@@ -124,6 +124,10 @@ export interface FuelEntry {
   ch4EfKgPerGj?: Quantity
   /** kgN2O per GJ (non-CSI addendum). */
   n2oEfKgPerGj?: Quantity
+  /** Free-text reference to an evidence file (ERP report, invoice, lab cert). */
+  evidenceReference?: string
+  /** Reason if any LHV/EF on this row is overridden vs the library default. */
+  overrideReason?: string
 }
 
 export interface MobileEntry {
@@ -141,6 +145,14 @@ export interface MobileEntry {
   /** DISTANCE_BASED: distance (km) and economy (unit/km). */
   distanceKm?: Quantity
   fuelPerKm?: Quantity
+  /** kgCH4 per GJ override (non-CSI addendum). */
+  ch4EfKgPerGj?: Quantity
+  /** kgN2O per GJ override (non-CSI addendum). */
+  n2oEfKgPerGj?: Quantity
+  /** Free-text reference to an evidence file. */
+  evidenceReference?: string
+  /** Reason if LHV/EF on this row is overridden vs the library default. */
+  overrideReason?: string
 }
 
 export interface FugitiveEntry {
@@ -152,6 +164,8 @@ export interface FugitiveEntry {
   leakedKg: Quantity
   /** Override the library GWP for this gas (e.g. supplier blend GWP). */
   gwpOverride?: Quantity
+  /** Free-text reference to an evidence file. */
+  evidenceReference?: string
 }
 
 export interface ActivityData {

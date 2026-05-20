@@ -354,6 +354,66 @@ describe('fugitive emissions (4th Scope 1 category)', () => {
     expect(codes(r.errors)).toContain('missing_fuel_quantity')
   })
 
+  it('mobile row LHV and CO2 EF overrides are used (not the fuel defaults)', () => {
+    const p = basePayload()
+    p.activityData.mobile = [
+      {
+        id: 'm1',
+        label: 'Overridden truck',
+        ownership: 'OWNED_CONTROLLED',
+        fuelCode: 'diesel',
+        quantity: 1_000,
+        quantityUnit: 'L',
+        lhvGjPerUnit: 0.04,
+        co2EfKgPerGj: 70,
+      },
+    ]
+    const r = calculate(p)
+    // 1000 * 0.04 / 1000 = 0.04 TJ ; * 70 = 2.8 tCO2
+    expect(r.scope1.components.mobileCombustionCO2Tonnes).toBeCloseTo(2.8, 4)
+  })
+
+  it('mobile row CH4 / N2O EF overrides flow into the non-CSI addendum', () => {
+    const p = basePayload()
+    p.activityData.mobile = [
+      {
+        id: 'm1',
+        label: 'CH4/N2O override',
+        ownership: 'OWNED_CONTROLLED',
+        fuelCode: 'diesel',
+        quantity: 1_000,
+        quantityUnit: 'L',
+        lhvGjPerUnit: 0.04,
+        co2EfKgPerGj: 70,
+        ch4EfKgPerGj: 0.01,
+        n2oEfKgPerGj: 0.005,
+      },
+    ]
+    const r = calculate(p)
+    // energyGJ = 40 ; CH4 0.4 kg * 27 + N2O 0.2 kg * 273 = 10.8 + 54.6 kg CO2e = 0.0654 t
+    expect(r.nonCsiCombustionGhg.ch4N2oCO2eTonnes).toBeCloseTo(0.0654, 4)
+  })
+
+  it('warns when the fugitive label mentions a different gas than selected', () => {
+    const p = basePayload()
+    p.activityData.fugitive = [
+      { id: 'g1', label: 'HV SF6 switchgear', gasCode: 'r410a', leakedKg: 100 },
+    ]
+    const r = calculate(p)
+    expect(codes(r.warnings)).toContain('gas_label_mismatch')
+    // Result still computed using the SELECTED gas, not the label
+    expect(r.scope1.components.fugitiveCO2eTonnes).toBe(225.6) // 100 * 2256 / 1000
+  })
+
+  it('does not warn when label and gas are consistent', () => {
+    const p = basePayload()
+    p.activityData.fugitive = [
+      { id: 'g1', label: 'Plant chillers (R-410A)', gasCode: 'r410a', leakedKg: 100 },
+    ]
+    const r = calculate(p)
+    expect(codes(r.warnings)).not.toContain('gas_label_mismatch')
+  })
+
   it('excluded fugitive with a reason does not block and contributes 0', () => {
     const p = basePayload()
     p.sourceApplicability.fugitive = false
