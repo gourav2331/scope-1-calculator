@@ -24,7 +24,15 @@
       "Bash(lsof -ti:3000)",
       "Bash(xargs kill -9)",
       "Bash(curl -s -o /dev/null -w \"port3000=%{http_code}\\\\n\" localhost:3000/)",
-      "Bash(curl -s -o /dev/null -w \"port3001=%{http_code}\\\\n\" localhost:3001/)"
+      "Bash(curl -s -o /dev/null -w \"port3001=%{http_code}\\\\n\" localhost:3001/)",
+      "Bash(python3 -c \"import reportlab, sys; print\\('reportlab', reportlab.Version\\)\")",
+      "Bash(python3 -)",
+      "Bash(pkill -f \"next dev\")",
+      "Bash(awk '/{step === 2 &&/,/^        \\\\\\)\\\\}$/' src/components/scope1-wizard.tsx)",
+      "Bash(curl -s -o /dev/null -w \"homepage=%{http_code}\\\\n\" localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"factorsAPI=%{http_code}\\\\n\" localhost:3000/api/v1/factors)",
+      "Bash(git commit -m ' *)",
+      "Bash(git add *)"
     ]
   }
 }
