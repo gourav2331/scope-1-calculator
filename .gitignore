@@ -32,6 +32,7 @@ src/payload-types.ts
 npm-debug.log*
 
 # Local research/reference material & generated test outputs — large binaries
-# (and some contain internal business/payment docs); keep out of version control
+# (and some contain internal business/payment docs); keep out of version control.
+# Note: OIL_GAS_SCOPE1_LEARNINGS.md is force-added (git add -f) and stays tracked.
 Industry Details/
 outputs/
