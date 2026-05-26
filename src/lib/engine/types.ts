@@ -12,7 +12,7 @@
 
 export type Quantity = number | null
 
-export type SectorCode = 'CEMENT'
+export type SectorCode = 'CEMENT' | 'OIL_GAS'
 
 export type BoundaryMethod = 'OPERATIONAL_CONTROL' | 'FINANCIAL_CONTROL' | 'EQUITY_SHARE'
 

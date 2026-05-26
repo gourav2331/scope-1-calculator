@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Sustally Scope 1 Calculator',
-  description: 'Cement-first Scope 1 calculator built with Next.js and Payload.',
+  description: 'Multi-sector Scope 1 GHG calculator (cement, oil & gas) built with Next.js and Payload.',
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

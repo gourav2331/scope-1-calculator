@@ -14,8 +14,11 @@ export const FactorLibrary: CollectionConfig = {
     useAsTitle: 'factorName',
     group: 'Methodology',
   },
+  // Factor codes are unique per sector, not globally: cement and oil & gas
+  // share codes (e.g. CO2_PER_C, FUEL_EF_diesel) with their own provenance.
+  indexes: [{ fields: ['sectorCode', 'factorCode'], unique: true }],
   fields: [
-    { name: 'factorCode', type: 'text', required: true, unique: true },
+    { name: 'factorCode', type: 'text', required: true },
     { name: 'factorName', type: 'text', required: true },
     {
       name: 'factorType',

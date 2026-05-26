@@ -8,20 +8,31 @@
  * later (spec: FACTOR_SNAPSHOT_ON_CALCULATION).
  */
 
-import { CONSTANT_FACTORS } from './constants'
+import { CONSTANT_FACTORS, type FactorDefault } from './constants'
 import type { FactorOverride, FactorSnapshot } from './types'
 
 export class FactorResolver {
   private overrides: Record<string, FactorOverride>
+  private constants: Record<string, FactorDefault>
   private snapshots: Map<string, FactorSnapshot> = new Map()
 
-  constructor(overrides: Record<string, FactorOverride> = {}) {
+  /**
+   * @param overrides  user factor overrides keyed by factorCode
+   * @param constants  the sector's constant-factor registry. Defaults to the
+   *   cement CONSTANT_FACTORS so existing cement callers are unaffected; the
+   *   Oil & Gas pack passes its own registry.
+   */
+  constructor(
+    overrides: Record<string, FactorOverride> = {},
+    constants: Record<string, FactorDefault> = CONSTANT_FACTORS,
+  ) {
     this.overrides = overrides
+    this.constants = constants
   }
 
   /** Resolve a named constant factor, recording a snapshot. */
   constant(code: string): number {
-    const base = CONSTANT_FACTORS[code]
+    const base = this.constants[code]
     if (!base) {
       throw new Error(`Unknown constant factor: ${code}`)
     }
@@ -55,6 +66,35 @@ export class FactorResolver {
       overridden: false,
     })
     return base.value
+  }
+
+  /**
+   * Resolve a factor the user may supply directly for a calculation. If a value
+   * is supplied, record IT as a site/override snapshot and return it; otherwise
+   * resolve (and record) the library default via `constant()`.
+   *
+   * This avoids the eager-evaluation audit bug `orDefault(x, constant(code))`,
+   * where `constant(code)` always runs and records the DEFAULT into the factor
+   * snapshots even when the supplied value `x` was the one actually used.
+   */
+  resolveOrSupplied(code: string, supplied: number | null | undefined): number {
+    if (supplied !== null && supplied !== undefined) {
+      const base = this.constants[code]
+      this.record({
+        factorCode: code,
+        factorName: base?.factorName ?? code,
+        value: supplied,
+        unit: base?.unit ?? '',
+        source: 'Site / supplier-supplied',
+        sourceVersion: 'site',
+        factorYear: null,
+        priorityRank: 2,
+        isDefault: false,
+        overridden: true,
+      })
+      return supplied
+    }
+    return this.constant(code)
   }
 
   /** True if a constant has a user override. */

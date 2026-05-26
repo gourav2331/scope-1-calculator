@@ -608,12 +608,13 @@ h2 {
 }
 
 .wizard-header {
-  background: var(--ink);
-  /* The header background is always dark (var(--ink) in light, #18151f in dark);
-     so its text must always be light. Using #fff keeps brand text visible
-     in both light and dark mode. */
-  color: #fff;
-  padding: 16px 0;
+  /* Day: light header (black Sustally mark, dark text). Night: dark header
+     (white mark, light text) via the .dark override below. The logo image
+     swaps with the theme so it always sits on a matching surface. */
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 14px 0;
 }
 
 .wizard-app.dark .wizard-header {
@@ -640,9 +641,59 @@ h2 {
   font-weight: 700;
 }
 
-.wizard-brand img {
-  height: 40px;
-  width: 40px;
+/* Clickable brand → calculator home. Reset button chrome but keep the
+   Georgia wordmark and white header colour. */
+button.wizard-brand {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  gap: 14px;
+  padding: 0;
+}
+button.wizard-brand:hover { opacity: 0.85; }
+
+/* Sustally wordmark — swaps black/white with the theme (set in the component).
+   The artwork carries ~40% vertical whitespace inside its viewBox, so it needs
+   a larger box height to read at a comfortable size. */
+.brand-logo {
+  display: block;
+  height: 52px;
+  width: auto;
+}
+
+.brand-divider {
+  align-self: center;
+  background: var(--rule);
+  height: 32px;
+  width: 1px;
+}
+.wizard-app.dark .brand-divider {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Clean product lockup: uppercase eyebrow houses "Scope 1", product name below. */
+.brand-label {
+  display: grid;
+  gap: 2px;
+  line-height: 1.05;
+  text-align: left;
+}
+.brand-eyebrow {
+  color: var(--purple);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.wizard-app.dark .brand-eyebrow {
+  color: var(--purple-2);
+}
+.brand-product {
+  font-family: Georgia, serif;
+  font-size: 19px;
+  font-weight: 700;
 }
 
 .wizard-brand em,
@@ -659,17 +710,27 @@ h2 {
 }
 
 .gwp-switch {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--paper);
+  border: 1px solid var(--rule);
   border-radius: 7px;
   padding: 4px;
 }
 
+.wizard-app.dark .gwp-switch {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+}
+
 .gwp-switch span {
-  color: rgba(255, 255, 255, 0.58);
+  color: var(--ink-mute);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.12em;
   padding: 0 6px;
+}
+
+.wizard-app.dark .gwp-switch span {
+  color: rgba(255, 255, 255, 0.58);
 }
 
 .gwp-switch button,
@@ -681,26 +742,38 @@ h2 {
 .gwp-switch button {
   background: transparent;
   border-radius: 5px;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--ink-soft);
   font-size: 12px;
   font-weight: 700;
   padding: 6px 11px;
 }
 
-.gwp-switch button.active {
+.wizard-app.dark .gwp-switch button {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.gwp-switch button.active,
+.wizard-app.dark .gwp-switch button.active {
   background: var(--purple);
   color: #fff;
 }
 
 .theme-switch {
   align-items: center;
-  background: #fff;
+  background: var(--paper);
+  border: 1px solid var(--rule);
   border-radius: 999px;
-  color: #17141f;
+  color: var(--ink);
   display: flex;
   height: 34px;
   justify-content: center;
   width: 34px;
+}
+
+.wizard-app.dark .theme-switch {
+  background: #fff;
+  border-color: transparent;
+  color: #17141f;
 }
 
 .wizard-progress {
@@ -1358,6 +1431,30 @@ h2 {
   font-size: 11px;
   margin-top: 10px;
   padding: 8px 12px;
+}
+
+/* Per-source evidence & notes (assurance readiness) */
+.entry-evidence {
+  border-top: 1px dashed var(--line);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+.entry-evidence > summary {
+  color: var(--purple);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  list-style: none;
+  user-select: none;
+}
+.entry-evidence > summary::-webkit-details-marker {
+  display: none;
+}
+.entry-evidence > summary::before {
+  content: '+ ';
+}
+.entry-evidence[open] > summary::before {
+  content: '\2212 ';
 }
 
 .add-entry-btn {

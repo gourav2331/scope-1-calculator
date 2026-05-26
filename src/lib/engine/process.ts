@@ -99,10 +99,7 @@ export function calculateProcess(
         ckdCO2 = applyTwoPercentFallback('actual dust data unavailable')
       } else {
         if (hasCkd) {
-          const rate = orDefault(
-            activity.dust.ckdCalcinationRate,
-            ctx.resolver.constant('CKD_CALCINATION_RATE_DEFAULT'),
-          )
+          const rate = ctx.resolver.resolveOrSupplied('CKD_CALCINATION_RATE_DEFAULT', activity.dust.ckdCalcinationRate)
           if (isMissing(activity.dust.ckdCalcinationRate)) {
             ctx.defaultsUsed.add('default_ckd_calcination_rate_used')
             ctx.warn('default_ckd_calcination_rate_used', 'Default CKD calcination rate (1) used.')
@@ -169,47 +166,47 @@ export function calculateProcess(
     methods.tocMethod !== 'NOT_APPLICABLE' &&
     isPresent(clinkerProduced)
   ) {
-    const ratioDefault = ctx.resolver.constant('RAW_MEAL_TO_CLINKER_RATIO')
-    const tocDefault = ctx.resolver.constant('TOC_FRACTION')
     const co2PerC = ctx.resolver.constant('CO2_PER_C')
 
-    let ratio = ratioDefault
-    let toc = tocDefault
+    let ratio: number
+    let toc: number
     if (methods.tocMethod === 'PLANT_SPECIFIC_TOC') {
-      if (isPresent(activity.rawMeal.rawMealToClinkerRatio)) {
-        if (activity.rawMeal.rawMealToClinkerRatio < 0) {
-          ctx.error(
-            'negative_input_value',
-            `Raw meal/clinker ratio cannot be negative (${activity.rawMeal.rawMealToClinkerRatio}).`,
-            'activityData.rawMeal.rawMealToClinkerRatio',
-          )
-        }
-        ratio = activity.rawMeal.rawMealToClinkerRatio
-      } else {
+      const suppliedRatio = activity.rawMeal.rawMealToClinkerRatio
+      if (isPresent(suppliedRatio) && suppliedRatio < 0) {
+        ctx.error(
+          'negative_input_value',
+          `Raw meal/clinker ratio cannot be negative (${suppliedRatio}).`,
+          'activityData.rawMeal.rawMealToClinkerRatio',
+        )
+      }
+      ratio = ctx.resolver.resolveOrSupplied('RAW_MEAL_TO_CLINKER_RATIO', suppliedRatio)
+      if (isMissing(suppliedRatio)) {
         ctx.defaultsUsed.add('default_toc_used')
         ctx.warn('default_toc_used', 'Plant-specific TOC requested but raw meal/clinker ratio missing; default 1.55 used.')
       }
-      if (isPresent(activity.rawMeal.tocFraction)) {
-        if (activity.rawMeal.tocFraction < 0) {
-          ctx.error(
-            'negative_input_value',
-            `TOC fraction cannot be negative (${activity.rawMeal.tocFraction}).`,
-            'activityData.rawMeal.tocFraction',
-          )
-        }
-        toc = activity.rawMeal.tocFraction
-        if (toc > 0.01) {
-          ctx.warn(
-            'high_toc_material_without_lab_data',
-            `TOC fraction ${toc} is unusually high (>1%). Confirm with lab data.`,
-            'activityData.rawMeal.tocFraction',
-          )
-        }
-      } else {
+      const suppliedToc = activity.rawMeal.tocFraction
+      if (isPresent(suppliedToc) && suppliedToc < 0) {
+        ctx.error(
+          'negative_input_value',
+          `TOC fraction cannot be negative (${suppliedToc}).`,
+          'activityData.rawMeal.tocFraction',
+        )
+      }
+      toc = ctx.resolver.resolveOrSupplied('TOC_FRACTION', suppliedToc)
+      if (isPresent(suppliedToc) && toc > 0.01) {
+        ctx.warn(
+          'high_toc_material_without_lab_data',
+          `TOC fraction ${toc} is unusually high (>1%). Confirm with lab data.`,
+          'activityData.rawMeal.tocFraction',
+        )
+      }
+      if (isMissing(suppliedToc)) {
         ctx.defaultsUsed.add('default_toc_used')
         ctx.warn('default_toc_used', 'Plant-specific TOC requested but TOC fraction missing; default 0.002 used.')
       }
     } else {
+      ratio = ctx.resolver.constant('RAW_MEAL_TO_CLINKER_RATIO')
+      toc = ctx.resolver.constant('TOC_FRACTION')
       ctx.defaultsUsed.add('default_toc_used')
     }
 
@@ -288,7 +285,7 @@ export function calculateUsEpaFallback(
     return 0
   }
   const clinkerEquivalent = f.cementProducedTonnes * f.clinkerToCementRatio
-  const ef = orDefault(f.clinkerEfTco2PerTonne, ctx.resolver.constant('CSI_DEFAULT_CLINKER_EF'))
+  const ef = ctx.resolver.resolveOrSupplied('CSI_DEFAULT_CLINKER_EF', f.clinkerEfTco2PerTonne)
   const co2 = clinkerEquivalent * ef
   ctx.fallbacksApplied.add('CSI_CLINKER_BASED -> US_EPA_CEMENT_BASED_FALLBACK')
   ctx.warn(

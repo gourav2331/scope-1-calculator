@@ -6,7 +6,7 @@
  * non-CSI addendum (the CSI protocol itself is CO2-only).
  */
 
-import { FUEL_DEFAULTS, GWP } from './constants'
+import { FUEL_DEFAULTS, GWP, type FuelDefault } from './constants'
 import type { EngineContext } from './context'
 import type { FuelCombustionMethod, FuelEntry } from './types'
 import { isMissing, isPresent, orDefault, round } from './util'
@@ -15,6 +15,10 @@ export interface FuelOutcome {
   fossilCO2Tonnes: number
   biomassCO2Tonnes: number
   ch4N2oCO2eTonnes: number
+  /** Raw CH4 mass (kg) so callers can apply a sector-specific GWP set. */
+  ch4Kg: number
+  /** Raw N2O mass (kg) so callers can apply a sector-specific GWP set. */
+  n2oKg: number
   /** Resolved category after defaults applied. */
   category: FuelEntry['category']
 }
@@ -32,9 +36,10 @@ function recordFuelFactorSnapshot(
   fuelCode: string,
   efKgPerGj: number,
   overridden: boolean,
-  overrideReason?: string,
+  overrideReason: string | undefined,
+  fuelDefaults: Record<string, FuelDefault>,
 ): void {
-  const def = FUEL_DEFAULTS[fuelCode]
+  const def = fuelDefaults[fuelCode]
   ctx.resolver.record({
     factorCode: `FUEL_EF_${fuelCode}`,
     factorName: `${def?.name ?? fuelCode} CO2 emission factor`,
@@ -69,11 +74,19 @@ export function calculateFuel(
   method: FuelCombustionMethod,
   entry: FuelEntry,
   scopeLabel: string,
+  fuelDefaults: Record<string, FuelDefault> = FUEL_DEFAULTS,
 ): FuelOutcome {
-  const def = FUEL_DEFAULTS[entry.fuelCode]
+  const def = fuelDefaults[entry.fuelCode]
   const category = entry.category ?? def?.category ?? 'CONVENTIONAL_FOSSIL'
   const fieldBase = `fuel.${entry.id}`
-  const zero: FuelOutcome = { fossilCO2Tonnes: 0, biomassCO2Tonnes: 0, ch4N2oCO2eTonnes: 0, category }
+  const zero: FuelOutcome = {
+    fossilCO2Tonnes: 0,
+    biomassCO2Tonnes: 0,
+    ch4N2oCO2eTonnes: 0,
+    ch4Kg: 0,
+    n2oKg: 0,
+    category,
+  }
 
   // --- structural negative-value guards ----------------------------------
   const numericFields: { val: unknown; field: string; min?: number; max?: number; label: string }[] = [
@@ -233,7 +246,7 @@ export function calculateFuel(
       )
       return zero
     }
-    recordFuelFactorSnapshot(ctx, entry.fuelCode, ef as number, efOverridden, entry.overrideReason)
+    recordFuelFactorSnapshot(ctx, entry.fuelCode, ef as number, efOverridden, entry.overrideReason, fuelDefaults)
     energyTJ = ((entry.quantity as number) * (lhv as number)) / 1000
     totalCO2 = energyTJ * (ef as number)
     traceFormula = 'energyTJ = qty x LHV / 1000 ; CO2 t = energyTJ x EF(kgCO2/GJ)'
@@ -281,14 +294,19 @@ export function calculateFuel(
   const biomassCO2 = totalCO2 * biomassFraction
   const fossilCO2 = totalCO2 * (1 - biomassFraction)
 
-  // --- non-CSI CH4 / N2O addendum (energy-based only) ---------------------
+  // --- CH4 / N2O addendum (energy-based only) -----------------------------
+  // Cement consumes ch4N2oCO2eTonnes (CO2-only CSI gross + separate addendum);
+  // Oil & Gas consumes the raw ch4Kg/n2oKg and applies its own horizon-aware
+  // GWP set (methane is a primary Scope 1 gas in O&G, not an addendum).
   let ch4N2oCO2e = 0
+  let ch4Kg = 0
+  let n2oKg = 0
   if (energyTJ > 0) {
     const energyGJ = energyTJ * 1000
     const ch4Ef = orDefault(entry.ch4EfKgPerGj, def?.ch4EfKgPerGj ?? 0)
     const n2oEf = orDefault(entry.n2oEfKgPerGj, def?.n2oEfKgPerGj ?? 0)
-    const ch4Kg = energyGJ * ch4Ef
-    const n2oKg = energyGJ * n2oEf
+    ch4Kg = energyGJ * ch4Ef
+    n2oKg = energyGJ * n2oEf
     const gwp = GWP[ctx.gwpSet]
     ch4N2oCO2e = (ch4Kg * gwp.CH4 + n2oKg * gwp.N2O) / 1000
   }
@@ -318,7 +336,14 @@ export function calculateFuel(
     })
   }
 
-  return { fossilCO2Tonnes: fossilCO2, biomassCO2Tonnes: biomassCO2, ch4N2oCO2eTonnes: ch4N2oCO2e, category }
+  return {
+    fossilCO2Tonnes: fossilCO2,
+    biomassCO2Tonnes: biomassCO2,
+    ch4N2oCO2eTonnes: ch4N2oCO2e,
+    ch4Kg,
+    n2oKg,
+    category,
+  }
 }
 
 export function calculateCombustion(

@@ -1,5 +1,5 @@
-import { Scope1Wizard } from '@/components/scope1-wizard'
+import { CalculatorRoot } from '@/components/calculator-root'
 
 export default function Home() {
-  return <Scope1Wizard />
+  return <CalculatorRoot />
 }

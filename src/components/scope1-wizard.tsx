@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Download,
   Factory,
@@ -8,6 +8,8 @@ import {
   FileSpreadsheet,
   FileText,
   Flame,
+  Fuel,
+  Hexagon,
   Info,
   Moon,
   Plus,
@@ -214,6 +216,43 @@ function emptyPayload(): InputPayload {
   }
 }
 
+/* ------------------------------ draft autosave --------------------------- */
+
+const CEMENT_DRAFT_KEY = 'sustally-cement-draft-v1'
+
+function saveCementDraft(p: InputPayload) {
+  try {
+    localStorage.setItem(CEMENT_DRAFT_KEY, JSON.stringify(p))
+  } catch {
+    /* storage unavailable — ignore */
+  }
+}
+
+function loadCementDraft(): InputPayload | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(CEMENT_DRAFT_KEY)
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (d?.sector?.sectorCode === 'CEMENT') return d as InputPayload
+  } catch {
+    /* corrupt draft — ignore */
+  }
+  return null
+}
+
+function cementDraftMeaningful(p: InputPayload): boolean {
+  const a = p?.activityData
+  return Boolean(
+    p?.organization?.name?.trim() ||
+      a?.kilnFuels?.length ||
+      a?.nonKilnFuels?.length ||
+      a?.mobile?.length ||
+      a?.fugitive?.length ||
+      a?.production?.clinkerProducedTonnes != null,
+  )
+}
+
 function toNum(v: string): Num {
   if (v.trim() === '') return null
   const n = Number(v)
@@ -292,7 +331,7 @@ function fugitiveRowCO2(trace: TraceEntry[] | undefined, label: string) {
 
 /* --------------------------------- Wizard --------------------------------- */
 
-export function Scope1Wizard() {
+export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas') => void }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [step, setStep] = useState(1)
   const [cat, setCat] = useState<Cat>('process')
@@ -302,6 +341,9 @@ export function Scope1Wizard() {
   const [busy, setBusy] = useState(false)
   const [step2Tried, setStep2Tried] = useState(false)
   const [step3Tried, setStep3Tried] = useState(false)
+  const [hasDraft, setHasDraft] = useState(false)
+  const [importError, setImportError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
   const [factors, setFactors] = useState<{
     constants: { factorCode: string; factorName: string; value: number; unit: string; source: string }[]
     gases: { gasCode: string; name: string; gwpAR5: number; gwpAR6: number }[]
@@ -312,6 +354,20 @@ export function Scope1Wizard() {
       .then((r) => r.json())
       .then(setFactors)
       .catch(() => {})
+  }, [])
+
+  // Restore an autosaved draft after mount (kept out of the initial useState so
+  // there's no SSR/hydration mismatch on theme- or GWP-dependent header chrome).
+  useEffect(() => {
+    try {
+      const d = loadCementDraft()
+      if (d && cementDraftMeaningful(d)) {
+        setP(d)
+        setHasDraft(true)
+      }
+    } catch {
+      /* corrupt/partial draft — ignore rather than crash the app */
+    }
   }, [])
 
   // Debounced live calculation - replaces /validate so we have the full result for
@@ -335,8 +391,64 @@ export function Scope1Wizard() {
     setP((prev) => {
       const next: InputPayload = structuredClone(prev)
       mut(next)
+      saveCementDraft(next)
       return next
     })
+  }
+
+  function startFresh() {
+    try {
+      localStorage.removeItem(CEMENT_DRAFT_KEY)
+    } catch {
+      /* ignore */
+    }
+    setP(emptyPayload())
+    setHasDraft(false)
+    setResult(null)
+    setLive(null)
+    setStep(1)
+  }
+
+  function importJson(file: File) {
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(String(reader.result))
+        const payload = parsed?.inputPayload ?? parsed?.input ?? parsed
+        if (payload?.sector?.sectorCode !== 'CEMENT') {
+          setImportError('That file is not a Cement payload (expected sector CEMENT).')
+          return
+        }
+        if (!payload.activityData || !payload.calculationContext) {
+          setImportError('That file does not look like a calculator payload (missing activityData / calculationContext).')
+          return
+        }
+        // Merge onto the empty template so any missing field gets a safe default
+        // (a partial payload must never load a half-built, crash-prone state).
+        const base = emptyPayload()
+        const merged: InputPayload = {
+          ...base,
+          ...payload,
+          calculationContext: { ...base.calculationContext, ...payload.calculationContext },
+          organization: { ...base.organization, ...payload.organization },
+          facility: { ...base.facility, ...payload.facility },
+          organizationBoundary: { ...base.organizationBoundary, ...payload.organizationBoundary },
+          methodSelections: { ...base.methodSelections, ...payload.methodSelections },
+          sourceApplicability: { ...base.sourceApplicability, ...payload.sourceApplicability },
+          activityData: { ...base.activityData, ...payload.activityData },
+        }
+        setImportError(null)
+        setP(merged)
+        saveCementDraft(merged)
+        setHasDraft(true)
+        setResult(null)
+        setLive(null)
+        setStep(4)
+      } catch {
+        setImportError('Could not parse that file as JSON.')
+      }
+    }
+    reader.readAsText(file)
   }
 
   async function runCalculate(save: boolean) {
@@ -358,6 +470,8 @@ export function Scope1Wizard() {
   async function loadSample() {
     const sample = sampleBharatCement()
     setP(sample)
+    saveCementDraft(sample)
+    setHasDraft(true)
     setBusy(true)
     try {
       const r = await fetch('/api/v1/calculations/cement/calculate', {
@@ -441,12 +555,14 @@ export function Scope1Wizard() {
     <main className={theme === 'dark' ? 'wizard-app dark' : 'wizard-app'}>
       <header className="wizard-header">
         <div className="wizard-header-inner">
-          <div className="wizard-brand">
-            <img src="/brand/logomark-white.svg" alt="Sustally" />
-            <span>
-              Scope <em>1</em> Cement Calculator
+          <button className="wizard-brand" onClick={() => setStep(1)} title="Calculator home" aria-label="Back to calculator home">
+            <img className="brand-logo" src={theme === 'dark' ? '/brand/typemark-white.svg' : '/brand/typemark-black.svg'} alt="Sustally" />
+            <span className="brand-divider" />
+            <span className="brand-label">
+              <span className="brand-eyebrow">Scope 1 Calculator</span>
+              <span className="brand-product">Cement</span>
             </span>
-          </div>
+          </button>
           <div className="wizard-actions">
             <div className="gwp-switch">
               <span>GWP</span>
@@ -505,6 +621,17 @@ export function Scope1Wizard() {
             <p className="step-sub">
               Cement is the first active methodology pack (CSI Cement CO2 Protocol). The engine is sector-extensible.
             </p>
+            {hasDraft && (
+              <div
+                style={{ alignItems: 'center', background: 'color-mix(in srgb, #2f6b4f 10%, transparent)', border: '1px solid color-mix(in srgb, #2f6b4f 32%, transparent)', borderRadius: 12, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', margin: '14px 0 0', padding: '12px 16px' }}
+              >
+                <div style={{ color: 'var(--ink)' }}>
+                  <b>Draft restored.</b>{' '}
+                  <span style={{ color: 'var(--muted)' }}>Your previous entry was autosaved in this browser and reloaded.</span>
+                </div>
+                <button className="btn ghost" onClick={startFresh}>Start fresh</button>
+              </div>
+            )}
             <div
               style={{
                 alignItems: 'center',
@@ -525,20 +652,45 @@ export function Scope1Wizard() {
                   Skip the data entry and see the calculator end‑to‑end with a sample cement plant.
                 </span>
               </div>
-              <button className="add-entry-btn" onClick={loadSample} disabled={busy}>
-                {busy ? 'Loading…' : 'Try with sample data →'}
-              </button>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="application/json,.json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) importJson(f)
+                    e.currentTarget.value = ''
+                  }}
+                />
+                <button className="btn ghost" onClick={() => fileRef.current?.click()}>
+                  Load JSON
+                </button>
+                <button className="add-entry-btn" onClick={loadSample} disabled={busy}>
+                  {busy ? 'Loading…' : 'Try with sample data →'}
+                </button>
+              </div>
             </div>
+            {importError && (
+              <p className="field-error" style={{ marginTop: -6, marginBottom: 12 }}>{importError}</p>
+            )}
             <div className="sector-grid">
               <button className="sector-card selected">
-                <span className="icon">◭</span>
+                <span className="icon"><Factory size={22} strokeWidth={1.75} /></span>
                 <strong>Cement</strong>
                 <small>Integrated, clinker, grinding units</small>
                 <span className="tags">CSI Protocol · active</span>
               </button>
-              {['Iron & Steel', 'Power', 'Chemicals', 'Oil & Gas', 'Textile', 'Pharma', 'General Mfg'].map((x) => (
+              <button className="sector-card" onClick={() => onSwitchSector?.('oil_gas')}>
+                <span className="icon"><Fuel size={22} strokeWidth={1.75} /></span>
+                <strong>Oil &amp; Gas</strong>
+                <small>Upstream · midstream · downstream</small>
+                <span className="tags">IPIECA / API · active</span>
+              </button>
+              {['Iron & Steel', 'Power', 'Chemicals', 'Textile', 'Pharma', 'General Mfg'].map((x) => (
                 <button className="sector-card muted" key={x} disabled>
-                  <span className="icon">◇</span>
+                  <span className="icon"><Hexagon size={22} strokeWidth={1.75} /></span>
                   <strong>{x}</strong>
                   <small>Future sector pack</small>
                   <span className="tags">Planned</span>

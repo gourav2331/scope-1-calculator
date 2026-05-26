@@ -1,12 +1,53 @@
 import ExcelJS from 'exceljs'
 
 import type { CalculationResult, InputPayload } from '@/lib/engine/types'
+import {
+  addFactorSnapshotsSheet,
+  addIssuesSheet,
+  addMethodologySheet,
+  addTraceSheet,
+  type MethodologyContent,
+} from './shared'
 
-/** Build an audit workbook: summary, scope breakdown, factor snapshots, full trace. */
-export async function buildWorkbook(
-  payload: InputPayload,
-  result: CalculationResult,
-): Promise<Buffer> {
+export function cementBoundaryText(payload: InputPayload): string {
+  const b = payload.organizationBoundary
+  if (b.boundaryMethod === 'EQUITY_SHARE') {
+    return `Equity share — ${b.consolidationPercent ?? b.ownershipSharePercent ?? 100}% of each source consolidated`
+  }
+  if (b.boundaryMethod === 'FINANCIAL_CONTROL') return 'Financial control — 100% of financially controlled assets'
+  return 'Operational control — 100% of operated assets'
+}
+
+export function cementMethodology(payload: InputPayload, result: CalculationResult): MethodologyContent {
+  return {
+    standards: [
+      'GHG Protocol Corporate Standard (WRI/WBCSD)',
+      'CSI Cement CO2 & Energy Protocol v2.0 (clinker-based)',
+      'US EPA cement-based method (automatic fallback when clinker data is unavailable)',
+      'IPCC 2006 Guidelines (combustion NCVs & EFs)',
+      `IPCC ${payload.calculationContext.gwpSet} Global Warming Potentials`,
+    ],
+    boundary: cementBoundaryText(payload),
+    gwpBasis: `${payload.calculationContext.gwpSet} (100-year)`,
+    covered: [
+      'Clinker calcination (plant CaO/MgO, CSI default, or IPCC default)',
+      'Bypass dust and cement kiln dust (CKD)',
+      'Raw meal organic carbon (TOC)',
+      'Kiln fuels (conventional + alternative fossil) and non-kiln fossil fuel',
+      'Owned/controlled mobile combustion',
+      'Fugitive emissions (refrigerants / SF6) as CO2e',
+    ],
+    exclusions: [
+      'Gross Scope 1 is CO2-only per the CSI protocol; combustion CH4/N2O is computed but reported as a separate non-CSI addendum, never inside gross Scope 1.',
+      'Biomass/biogenic CO2 is a memo item, excluded from gross Scope 1 (its CH4/N2O remain in the addendum).',
+      'Purchased electricity is supporting Scope 2; bought (net external) clinker is supporting Scope 3 — neither is in gross Scope 1.',
+    ],
+    notes: [result.nonCsiCombustionGhg.note],
+  }
+}
+
+/** Build an audit workbook: summary, methodology, factor snapshots, full trace, validation. */
+export async function buildWorkbook(payload: InputPayload, result: CalculationResult): Promise<Buffer> {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Sustally Scope 1 Calculator'
   wb.created = new Date()
@@ -48,68 +89,10 @@ export async function buildWorkbook(
   summary.getRow(1).font = { bold: true }
   summary.getRow(8).font = { bold: true }
 
-  const factors = wb.addWorksheet('Factor snapshots')
-  factors.columns = [
-    { header: 'Factor code', key: 'code', width: 30 },
-    { header: 'Name', key: 'name', width: 40 },
-    { header: 'Value', key: 'value', width: 14 },
-    { header: 'Unit', key: 'unit', width: 16 },
-    { header: 'Source', key: 'source', width: 44 },
-    { header: 'Version', key: 'ver', width: 12 },
-    { header: 'Year', key: 'year', width: 8 },
-    { header: 'Priority', key: 'rank', width: 9 },
-    { header: 'Overridden', key: 'ov', width: 11 },
-    { header: 'Override reason', key: 'reason', width: 40 },
-  ]
-  factors.getRow(1).font = { bold: true }
-  for (const s of result.factorSnapshots) {
-    factors.addRow({
-      code: s.factorCode,
-      name: s.factorName,
-      value: s.value,
-      unit: s.unit,
-      source: s.source,
-      ver: s.sourceVersion,
-      year: s.factorYear ?? '',
-      rank: s.priorityRank,
-      ov: s.overridden ? 'YES' : 'no',
-      reason: s.overrideReason ?? '',
-    })
-  }
-
-  const trace = wb.addWorksheet('Calculation trace')
-  trace.columns = [
-    { header: 'Step', key: 'step', width: 40 },
-    { header: 'Category', key: 'cat', width: 18 },
-    { header: 'Method', key: 'method', width: 26 },
-    { header: 'Formula', key: 'formula', width: 60 },
-    { header: 'Inputs', key: 'inputs', width: 60 },
-    { header: 'Output tCO2', key: 'out', width: 16 },
-    { header: 'Fallback', key: 'fb', width: 30 },
-  ]
-  trace.getRow(1).font = { bold: true }
-  for (const t of result.calculationTrace) {
-    trace.addRow({
-      step: t.step,
-      cat: t.category,
-      method: t.method ?? '',
-      formula: t.formula,
-      inputs: JSON.stringify(t.inputs),
-      out: t.outputTonnesCO2,
-      fb: t.fallbackApplied ?? '',
-    })
-  }
-
-  const issues = wb.addWorksheet('Warnings and errors')
-  issues.columns = [
-    { header: 'Severity', key: 'sev', width: 12 },
-    { header: 'Code', key: 'code', width: 44 },
-    { header: 'Message', key: 'msg', width: 80 },
-    { header: 'Field', key: 'field', width: 40 },
-  ]
-  issues.getRow(1).font = { bold: true }
-  for (const e of result.errors) issues.addRow({ sev: 'ERROR', code: e.code, msg: e.message, field: e.fieldPath ?? '' })
-  for (const w of result.warnings) issues.addRow({ sev: 'WARNING', code: w.code, msg: w.message, field: w.fieldPath ?? '' })
+  addMethodologySheet(wb, cementMethodology(payload, result))
+  addFactorSnapshotsSheet(wb, result.factorSnapshots)
+  addTraceSheet(wb, result.calculationTrace)
+  addIssuesSheet(wb, result.errors, result.warnings)
 
   const buf = await wb.xlsx.writeBuffer()
   return Buffer.from(buf)

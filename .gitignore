@@ -30,3 +30,8 @@ src/payload-types.ts
 # Logs
 *.log
 npm-debug.log*
+
+# Local research/reference material & generated test outputs — large binaries
+# (and some contain internal business/payment docs); keep out of version control
+Industry Details/
+outputs/

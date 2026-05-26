@@ -25,11 +25,9 @@ export function calculateSupporting(
   let electricityCO2 = 0
   const mwh = activity.purchasedElectricity.mwh
   if (isPresent(mwh)) {
-    const ef = orDefault(
-      activity.purchasedElectricity.gridEfTco2PerMwh,
-      ctx.resolver.constant('INDIA_GRID_EF'),
-    )
-    if (isMissing(activity.purchasedElectricity.gridEfTco2PerMwh)) {
+    const gridEf = activity.purchasedElectricity.gridEfTco2PerMwh
+    const ef = ctx.resolver.resolveOrSupplied('INDIA_GRID_EF', gridEf)
+    if (isMissing(gridEf)) {
       ctx.defaultsUsed.add('old_electricity_factor_used')
       ctx.warn('old_electricity_factor_used', `Default grid EF ${ef} tCO2/MWh used for purchased electricity.`)
     }

@@ -14,7 +14,7 @@ export const Organizations: CollectionConfig = {
       name: 'sector',
       type: 'select',
       defaultValue: 'cement',
-      options: ['cement'],
+      options: ['cement', 'oil_gas'],
       required: true,
     },
     {
