@@ -113,7 +113,7 @@ function emptyPulpPaperPayload(): PulpPaperInputPayload {
       inventoryVersion: 'SUSTALLY_PP_V20',
       gwpSet: 'AR6_100',
     },
-    organization: { name: '', country: 'IN' },
+    organization: { name: '', country: 'IN', contactName: '', contactEmail: '', contactPhone: '', contactRole: '' },
     facility: { name: '', millType: 'KRAFT' },
     organizationBoundary: { boundaryMethod: 'OPERATIONAL_CONTROL', ownershipSharePercent: 100, consolidationPercent: 100 },
     sector: { sectorCode: 'PULP_PAPER' },
@@ -154,7 +154,7 @@ function emptyPulpPaperPayload(): PulpPaperInputPayload {
 /** A worked sample kraft mill — exercises every category at least once. */
 function sampleKraftMill(): PulpPaperInputPayload {
   const p = emptyPulpPaperPayload()
-  p.organization = { name: 'Sample Pulp & Paper Ltd', country: 'IN' }
+  p.organization = { name: 'Sample Pulp & Paper Ltd', country: 'IN', contactName: 'Aditi Sharma', contactEmail: 'aditi.sharma@samplepp.example', contactPhone: '+91 98xxxxxxxx', contactRole: 'Head of Sustainability' }
   p.facility = { name: 'Karnataka Kraft Mill', millType: 'KRAFT', state: 'KA' }
   p.activityData.production = { airDryPulpTonnes: 320_000, paperProducedTonnes: 280_000 }
   p.activityData.stationaryCombustion = [
@@ -761,26 +761,29 @@ function ReportedTable({ entries, trace, onChange }: { entries: ReportedEntry[];
 
 function LiveTotals({ live }: { live: PulpPaperCalculationResult | null }) {
   if (!live) return null
-  const c = live.scope1.byCategory
+  const s = live.scope1
+  const items: { k: string; v: number; unit?: string; headline?: boolean }[] = [
+    { k: 'Gross Scope 1', v: s.grossScope1CO2eTonnes, unit: 'tCO2e', headline: true },
+    { k: 'CO2', v: s.byGas.co2Tonnes, unit: 'tCO2' },
+    { k: 'CH4 (as CO2e)', v: s.byGas.ch4CO2eTonnes, unit: 'tCO2e' },
+    { k: 'N2O (as CO2e)', v: s.byGas.n2oCO2eTonnes, unit: 'tCO2e' },
+    { k: 'Refrigerants', v: s.byGas.refrigerantCO2eTonnes, unit: 'tCO2e' },
+    { k: 'Biogenic memo', v: live.memoItems.biogenicCO2Tonnes, unit: 'tCO2' },
+  ]
   return (
-    <div className="live-totals">
-      <span className="live-totals-pill">
-        <strong>Gross Scope 1</strong>
-        <span>{fmt.format(live.scope1.grossScope1CO2eTonnes)}</span>
-        <small>tCO2e</small>
-      </span>
-      {(['stationaryCombustion','biomassCombustion','limeKilns','makeupCarbonates','mobile','landfills','anaerobicWwt','refrigerants','co2Transfers','reported'] as const).map((k) => (
-        <span key={k} className="live-totals-pill">
-          <strong>{k.replace(/([A-Z])/g, ' $1').replace(/^./, (x) => x.toUpperCase())}</strong>
-          <span>{fmt.format(c[k].co2eTonnes)}</span>
-          <small>tCO2e</small>
-        </span>
-      ))}
-      <span className="live-totals-pill">
-        <strong>Biogenic CO2 (memo)</strong>
-        <span>{fmt.format(live.memoItems.biogenicCO2Tonnes)}</span>
-        <small>tCO2 — excluded</small>
-      </span>
+    <div className="live-totals-strip">
+      <h3>Live results — updates as you type</h3>
+      <div className="live-totals-grid">
+        {items.map(({ k, v, unit, headline }) => (
+          <div key={k} className={headline ? 'live-cell live-cell-headline' : 'live-cell'}>
+            <div className="live-cell-label">{k}</div>
+            <div className="live-cell-value">
+              {fmt.format(v)}
+              <span className="live-cell-unit">{unit}</span>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -799,13 +802,12 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [importError, setImportError] = useState<string | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
+  const [step2Tried, setStep2Tried] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
-  // theme + restore draft
+  // restore draft (theme stays at the explicit user choice; do NOT auto-flip to OS dark mode)
   useEffect(() => {
     try {
-      const t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-      setTheme(t)
       const restored = loadDraft()
       if (restored && draftIsMeaningful(restored)) { setP(restored); setHasDraft(true) }
     } catch { /* ignore */ }
@@ -898,6 +900,8 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
   } as const
 
   const orgValid = !!p.organization.name.trim()
+    && !!(p.organization.contactName ?? '').trim()
+    && emailRe.test((p.organization.contactEmail ?? '').trim())
   const facilityValid = !!p.facility.name.trim() && !!p.facility.millType
 
   const trace = (live?.calculationTrace ?? result?.calculationTrace) as TraceEntry[] | undefined
@@ -999,39 +1003,76 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
           </section>
         )}
 
-        {step === 2 && (
-          <section className="step-page active">
-            <h1 className="step-title">Organisation &amp; <em>boundary</em></h1>
-            <p className="step-sub">The consolidation boundary decides which mills count as yours.</p>
-            <div className="form-card">
-              <h2>Company</h2>
-              <label className="field">Company name<span className="required-mark">*</span>
-                <input value={p.organization.name} placeholder="e.g. Bharat Paper Ltd" onChange={(e) => patch((d) => (d.organization.name = e.target.value))} />
-              </label>
-              <div className="field-row">
-                <label className="field">Operating country
-                  <select value={p.organization.country} onChange={(e) => patch((d) => (d.organization.country = e.target.value))}>
-                    <option value="IN">India</option><option value="GLOBAL">Other</option>
-                  </select>
+        {step === 2 && (() => {
+          const o = p.organization
+          const emailOk = emailRe.test((o.contactEmail ?? '').trim())
+          const err = { name: !o.name.trim(), contactName: !(o.contactName ?? '').trim(), contactEmail: !(o.contactEmail ?? '').trim() || !emailOk }
+          const invalid = err.name || err.contactName || err.contactEmail
+          const show = step2Tried
+          return (
+            <section className="step-page active">
+              <h1 className="step-title">Organisation &amp; <em>boundary</em></h1>
+              <p className="step-sub">The consolidation boundary decides which mills count as yours — applies uniformly across all sectors.</p>
+              <div className="form-card">
+                <h2>Company</h2>
+                <label className="field">
+                  Company name<span className="required-mark">*</span>
+                  <input value={o.name} placeholder="e.g. Bharat Paper Ltd" onChange={(e) => patch((d) => (d.organization.name = e.target.value))} />
+                  {show && err.name && <div className="field-error">Company name is required.</div>}
                 </label>
-                <label className="field">Consolidation method
-                  <select value={p.organizationBoundary.boundaryMethod} onChange={(e) => patch((d) => (d.organizationBoundary.boundaryMethod = e.target.value as PulpPaperInputPayload['organizationBoundary']['boundaryMethod']))}>
-                    <option value="OPERATIONAL_CONTROL">Operational control</option>
-                    <option value="FINANCIAL_CONTROL">Financial control</option>
-                    <option value="EQUITY_SHARE">Equity share</option>
-                  </select>
-                </label>
-                {p.organizationBoundary.boundaryMethod === 'EQUITY_SHARE' && (
-                  <NumField label="Consolidation %" value={p.organizationBoundary.consolidationPercent ?? 100} onChange={(v) => patch((d) => (d.organizationBoundary.consolidationPercent = v ?? 100))} />
+                <div className="field-row">
+                  <label className="field">Operating country
+                    <select value={o.country} onChange={(e) => patch((d) => (d.organization.country = e.target.value))}>
+                      <option value="IN">India</option>
+                      <option value="GLOBAL">Other</option>
+                    </select>
+                  </label>
+                  <label className="field">Consolidation / boundary method
+                    <select value={p.organizationBoundary.boundaryMethod} onChange={(e) => patch((d) => (d.organizationBoundary.boundaryMethod = e.target.value as PulpPaperInputPayload['organizationBoundary']['boundaryMethod']))}>
+                      <option value="OPERATIONAL_CONTROL">Operational control</option>
+                      <option value="FINANCIAL_CONTROL">Financial control</option>
+                      <option value="EQUITY_SHARE">Equity share</option>
+                    </select>
+                  </label>
+                </div>
+                {p.organizationBoundary.boundaryMethod === 'EQUITY_SHARE' ? (
+                  <div className="field-row">
+                    <NumField label="Consolidation / equity share %" step="0.01" value={p.organizationBoundary.consolidationPercent ?? 100}
+                      onChange={(v) => patch((d) => { const next = v ?? 100; d.organizationBoundary.consolidationPercent = next; d.organizationBoundary.ownershipSharePercent = next })}
+                      hint="Your equity share — every Scope 1 bucket is scaled by this percentage" />
+                  </div>
+                ) : (
+                  <p className="form-sub" style={{ marginTop: 6 }}>
+                    Under <b>{p.organizationBoundary.boundaryMethod.toLowerCase().replace('_', ' ')}</b>, 100% of the mill&apos;s Scope 1 is reported. Switch to <b>Equity share</b> for a non-operating stake.
+                  </p>
                 )}
               </div>
-            </div>
-            <div className="step-footer">
-              <button className="btn ghost" onClick={() => setStep(1)}>Back</button>
-              <button className="btn primary" disabled={!orgValid} onClick={() => setStep(3)}>Continue</button>
-            </div>
-          </section>
-        )}
+              <div className="form-card contact-card">
+                <h2>Primary contact</h2>
+                <p className="form-sub">Who is preparing this inventory? Saved with the report for follow-up and assurance.</p>
+                <div className="field-row">
+                  <label className="field">Contact name<span className="required-mark">*</span>
+                    <input value={o.contactName ?? ''} placeholder="e.g. Aditi Sharma" onChange={(e) => patch((d) => (d.organization.contactName = e.target.value))} />
+                    {show && err.contactName && <div className="field-error">Contact name is required.</div>}
+                  </label>
+                  <label className="field">Work email<span className="required-mark">*</span>
+                    <input type="email" value={o.contactEmail ?? ''} placeholder="name@company.com" onChange={(e) => patch((d) => (d.organization.contactEmail = e.target.value))} />
+                    {show && err.contactEmail && <div className="field-error">A valid work email is required.</div>}
+                  </label>
+                </div>
+                <div className="field-row">
+                  <label className="field">Phone<input value={o.contactPhone ?? ''} placeholder="+91 98xxxxxxxx" onChange={(e) => patch((d) => (d.organization.contactPhone = e.target.value))} /></label>
+                  <label className="field">Role / designation<input value={o.contactRole ?? ''} placeholder="e.g. Head of Sustainability" onChange={(e) => patch((d) => (d.organization.contactRole = e.target.value))} /></label>
+                </div>
+              </div>
+              <div className="step-footer">
+                <button className="btn ghost" onClick={() => setStep(1)}>Back</button>
+                <button className="btn primary" onClick={() => { setStep2Tried(true); if (!invalid) setStep(3) }}>Continue</button>
+              </div>
+              {show && invalid && <p className="field-error" style={{ marginTop: 6 }}>Please complete the required fields above before continuing.</p>}
+            </section>
+          )
+        })()}
 
         {step === 3 && (
           <section className="step-page active">

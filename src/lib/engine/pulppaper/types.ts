@@ -278,7 +278,7 @@ export interface PulpPaperInputPayload {
     inventoryVersion: string
     gwpSet: PulpPaperGwpSet
   }
-  organization: { name: string; country: string }
+  organization: { name: string; country: string; contactName?: string; contactEmail?: string; contactPhone?: string; contactRole?: string }
   facility: PulpPaperFacility
   organizationBoundary: {
     boundaryMethod: 'OPERATIONAL_CONTROL' | 'FINANCIAL_CONTROL' | 'EQUITY_SHARE'
