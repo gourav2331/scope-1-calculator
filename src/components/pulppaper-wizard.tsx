@@ -905,41 +905,46 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
   const COL_GRID = '2.5fr 1fr 1fr 1fr 1fr'
 
   return (
-    <main className="wizard">
+    <main className={theme === 'dark' ? 'wizard-app dark' : 'wizard-app'}>
       <header className="wizard-header">
-        <div className="wizard-brand">
-          <button className="brand-link" onClick={() => onSwitchSector?.('cement')} aria-label="Back to calculator home">
-            <img src={theme === 'dark' ? '/brand/typemark-white.svg' : '/brand/typemark-black.svg'} alt="Sustally" className="brand-logo" />
+        <div className="wizard-header-inner">
+          <button className="wizard-brand" onClick={() => setStep(1)} title="Calculator home" aria-label="Back to calculator home">
+            <img className="brand-logo" src={theme === 'dark' ? '/brand/typemark-white.svg' : '/brand/typemark-black.svg'} alt="Sustally" />
             <span className="brand-divider" />
-            <span className="brand-tag">SCOPE 1 CALCULATOR</span>
-            <span className="brand-sector">Pulp &amp; Paper</span>
+            <span className="brand-label">
+              <span className="brand-eyebrow">Scope 1 Calculator</span>
+              <span className="brand-product">Pulp &amp; Paper</span>
+            </span>
           </button>
-        </div>
-        <div className="wizard-header-right">
-          <div className="gwp-toggle">
-            <span className="gwp-label">GWP</span>
-            {(['AR5_100', 'AR6_100', 'AR6_20'] as const).map((g) => (
-              <button key={g} className={p.calculationContext.gwpSet === g ? 'active' : ''} onClick={() => patch((d) => (d.calculationContext.gwpSet = g))}>
-                {g.replace('_', ' · ')}
-              </button>
-            ))}
+          <div className="wizard-actions">
+            <div className="gwp-switch">
+              <span>GWP</span>
+              {(['AR5_100', 'AR6_100', 'AR6_20'] as const).map((g) => (
+                <button key={g} className={p.calculationContext.gwpSet === g ? 'active' : ''} onClick={() => patch((d) => (d.calculationContext.gwpSet = g))}>
+                  {g.replace('_', ' · ')}
+                </button>
+              ))}
+            </div>
+            <button className="theme-switch" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} title="Toggle theme" aria-label="Toggle theme">
+              {theme === 'dark' ? '☀' : '🌙'}
+            </button>
           </div>
-          <button className="theme-toggle" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} title="Toggle theme">
-            {theme === 'dark' ? '☀' : '🌙'}
-          </button>
         </div>
       </header>
 
-      <nav className="wizard-steps">
-        {(['Sector','Organisation','Facility & methods','Activity data','Review & report'] as const).map((label, i) => (
-          <button key={label} className={`wizard-step ${step === i + 1 ? 'active' : ''} ${step > i + 1 ? 'done' : ''}`} onClick={() => setStep(i + 1)}>
-            <span className="step-num">{i + 1}</span>
-            <span className="step-label">{label}</span>
-          </button>
-        ))}
+      <nav className="wizard-progress">
+        {(['Sector','Organisation','Facility & methods','Activity data','Review & report'] as const).map((label, i) => {
+          const target = i + 1
+          return (
+            <button key={label} className={step === target ? 'active' : step > target ? 'complete' : ''} onClick={() => setStep(target)}>
+              <span>{target}</span>
+              <b>{label}</b>
+            </button>
+          )
+        })}
       </nav>
 
-      <section className="wizard-body">
+      <section className="wizard-main">
         {step === 1 && (
           <section className="step-page active">
             <h1 className="step-title">What <em>sector</em> are you in?</h1>
