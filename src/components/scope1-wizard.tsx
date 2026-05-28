@@ -732,7 +732,7 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
               <div className="form-card">
                 <h2>Company</h2>
                 <label className="field">
-                  Company name<span className="required-mark">*</span>
+                  <span className="field-title">Company name<span className="required-mark">*</span></span>
                   <input
                     value={o.name}
                     placeholder="e.g. Surya Cement Pvt Ltd"
@@ -797,7 +797,7 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                 </p>
                 <div className="field-row">
                   <label className="field">
-                    Contact name<span className="required-mark">*</span>
+                    <span className="field-title">Contact name<span className="required-mark">*</span></span>
                     <input
                       value={o.contactName ?? ''}
                       placeholder="e.g. Anita Sharma"
@@ -806,7 +806,7 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                     {show && err.contactName && <div className="field-error">Contact name is required.</div>}
                   </label>
                   <label className="field">
-                    Work email<span className="required-mark">*</span>
+                    <span className="field-title">Work email<span className="required-mark">*</span></span>
                     <input
                       type="email"
                       value={o.contactEmail ?? ''}
@@ -874,7 +874,7 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
               <h2>Facility &amp; reporting period</h2>
               <div className="field-row">
                 <label className="field">
-                  Facility name<span className="required-mark">*</span>
+                  <span className="field-title">Facility name<span className="required-mark">*</span></span>
                   <input
                     value={p.facility.name}
                     placeholder="Plant 1 - Maharashtra"

@@ -1325,7 +1325,7 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
               <div className="form-card">
                 <h2>Company</h2>
                 <label className="field">
-                  Company name<span className="required-mark">*</span>
+                  <span className="field-title">Company name<span className="required-mark">*</span></span>
                   <input value={o.name} placeholder="e.g. Bharat E&P Ltd" onChange={(e) => patch((d) => (d.organization.name = e.target.value))} />
                   {show && err.name && <div className="field-error">Company name is required.</div>}
                 </label>
@@ -1360,11 +1360,11 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                 <h2>Primary contact</h2>
                 <p className="form-sub">Who is preparing this inventory? Saved with the report for follow-up and assurance.</p>
                 <div className="field-row">
-                  <label className="field">Contact name<span className="required-mark">*</span>
+                  <label className="field"><span className="field-title">Contact name<span className="required-mark">*</span></span>
                     <input value={o.contactName ?? ''} placeholder="e.g. Rao Venkatesh" onChange={(e) => patch((d) => (d.organization.contactName = e.target.value))} />
                     {show && err.contactName && <div className="field-error">Contact name is required.</div>}
                   </label>
-                  <label className="field">Work email<span className="required-mark">*</span>
+                  <label className="field"><span className="field-title">Work email<span className="required-mark">*</span></span>
                     <input type="email" value={o.contactEmail ?? ''} placeholder="name@company.com" onChange={(e) => patch((d) => (d.organization.contactEmail = e.target.value))} />
                     {show && err.contactEmail && <div className="field-error">A valid work email is required.</div>}
                   </label>
@@ -1390,7 +1390,7 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
             <div className="form-card">
               <h2>Facility &amp; reporting period</h2>
               <div className="field-row">
-                <label className="field">Facility name<span className="required-mark">*</span>
+                <label className="field"><span className="field-title">Facility name<span className="required-mark">*</span></span>
                   <input value={p.facility.name} placeholder="e.g. Mumbai High block" onChange={(e) => patch((d) => (d.facility.name = e.target.value))} />
                   {step3Tried && !facilityValid && <div className="field-error">Facility name is required.</div>}
                 </label>

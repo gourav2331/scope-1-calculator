@@ -22,10 +22,12 @@ import {
   Hexagon,
   Info,
   Leaf,
+  Moon,
   PenTool,
   Plus,
   Recycle,
   Snowflake,
+  Sun,
   Trash2,
   TreePine,
   Truck,
@@ -814,6 +816,12 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     } catch { /* ignore */ }
   }, [])
 
+  // Don't show "required" errors on a fresh return to step 2/3 — only after the
+  // user has actually clicked Continue on that step within the current visit.
+  useEffect(() => {
+    if (step === 1) { setStep2Tried(false); setStep3Tried(false) }
+  }, [step])
+
   // autosave + debounced live calc
   useEffect(() => {
     saveDraft(p)
@@ -963,8 +971,8 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                 </button>
               ))}
             </div>
-            <button className="theme-switch" onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))} title="Toggle theme" aria-label="Toggle theme">
-              {theme === 'dark' ? '☀' : '🌙'}
+            <button className="theme-switch" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} title="Toggle theme" aria-label="Toggle theme">
+              {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
             </button>
           </div>
         </div>
@@ -1057,7 +1065,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               <div className="form-card">
                 <h2>Company</h2>
                 <label className="field">
-                  Company name<span className="required-mark">*</span>
+                  <span className="field-title">Company name<span className="required-mark">*</span></span>
                   <input value={o.name} placeholder="e.g. Bharat Paper Ltd" onChange={(e) => patch((d) => (d.organization.name = e.target.value))} />
                   {show && err.name && <div className="field-error">Company name is required.</div>}
                 </label>
@@ -1092,11 +1100,11 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                 <h2>Primary contact</h2>
                 <p className="form-sub">Who is preparing this inventory? Saved with the report for follow-up and assurance.</p>
                 <div className="field-row">
-                  <label className="field">Contact name<span className="required-mark">*</span>
+                  <label className="field"><span className="field-title">Contact name<span className="required-mark">*</span></span>
                     <input value={o.contactName ?? ''} placeholder="e.g. Aditi Sharma" onChange={(e) => patch((d) => (d.organization.contactName = e.target.value))} />
                     {show && err.contactName && <div className="field-error">Contact name is required.</div>}
                   </label>
-                  <label className="field">Work email<span className="required-mark">*</span>
+                  <label className="field"><span className="field-title">Work email<span className="required-mark">*</span></span>
                     <input type="email" value={o.contactEmail ?? ''} placeholder="name@company.com" onChange={(e) => patch((d) => (d.organization.contactEmail = e.target.value))} />
                     {show && err.contactEmail && <div className="field-error">A valid work email is required.</div>}
                   </label>
@@ -1122,7 +1130,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
             <div className="form-card">
               <h2>Facility</h2>
               <div className="field-row">
-                <label className="field">Mill name<span className="required-mark">*</span>
+                <label className="field"><span className="field-title">Mill name<span className="required-mark">*</span></span>
                   <input value={p.facility.name} placeholder="e.g. Karnataka Kraft Mill" onChange={(e) => patch((d) => (d.facility.name = e.target.value))} />
                 </label>
                 <label className="field">Mill type

@@ -1528,9 +1528,17 @@ button.wizard-brand:hover { opacity: 0.85; }
 
 /* ----- Required-field mark + inline errors ----------------------------- */
 .required-mark {
-  color: var(--purple);
+  color: #d32f2f; /* red — universal "required" signal */
   font-weight: 800;
-  margin-left: 2px;
+  margin-left: 3px;
+}
+/* Wrap label text + required-mark in this span so they stay on one line */
+/* inside the grid-based .field. Without it the * gets its own grid row.   */
+.field > .field-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
 }
 .field-error {
   color: #b3261e;
