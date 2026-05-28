@@ -1066,6 +1066,10 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                 <>
                   <div className="form-card">
                     <h2>Production</h2>
+                    <p className="form-sub">
+                      Reporting-period volumes drive gross Scope 1 (clinker calcination) and the intensity metrics
+                      (kgCO2 / t clinker, t cementitious). Leave a field blank if it doesn&apos;t apply.
+                    </p>
                     <div className="field-row">
                       <NumField label="Clinker produced" unit="t" value={ad.production.clinkerProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.clinkerProducedTonnes = v))} />
                       <NumField label="Cement produced" unit="t" value={ad.production.cementProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.cementProducedTonnes = v))} />
@@ -1076,6 +1080,10 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                   {ms.clinkerEmissionFactorMethod === 'PLANT_SPECIFIC_CAO_MGO' && (
                     <div className="form-card">
                       <h2>Clinker chemistry (plant-specific EF)</h2>
+                      <p className="form-sub">
+                        Lab-measured CaO and MgO content of your clinker. Used when the clinker EF method is
+                        <b> plant-specific CaO/MgO</b> to derive a site EF instead of the CSI default 0.525 tCO2/t.
+                      </p>
                       <div className="field-row">
                         <NumField label="CaO %" value={ad.clinkerChemistry.caoPercent} onChange={(v) => patch((d) => (d.activityData.clinkerChemistry.caoPercent = v))} />
                         <NumField label="Non-carbonate CaO %" value={ad.clinkerChemistry.caoNonCarbonatePercent} onChange={(v) => patch((d) => (d.activityData.clinkerChemistry.caoNonCarbonatePercent = v))} />
@@ -1088,6 +1096,10 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                   {ms.dustMethod === 'ACTUAL_DUST_DATA' && (
                     <div className="form-card">
                       <h2>Dust (CKD &amp; bypass)</h2>
+                      <p className="form-sub">
+                        Cement kiln dust and bypass dust leaving the kiln and their calcination rates. Calcined
+                        dust released to atmosphere is gross Scope 1; recycled dust is not double-counted.
+                      </p>
                       <div className="field-row">
                         <NumField label="CKD leaving kiln" unit="t" value={ad.dust.ckdLeavingKilnTonnes} onChange={(v) => patch((d) => (d.activityData.dust.ckdLeavingKilnTonnes = v))} />
                         <NumField label="CKD calcination rate (0–1)" step="0.01" value={ad.dust.ckdCalcinationRate} onChange={(v) => patch((d) => (d.activityData.dust.ckdCalcinationRate = v))} hint="Default 1" />
@@ -1100,6 +1112,10 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                   {ms.tocMethod === 'PLANT_SPECIFIC_TOC' && (
                     <div className="form-card">
                       <h2>Raw meal TOC (plant-specific)</h2>
+                      <p className="form-sub">
+                        The kiln burns the organic carbon in raw meal to CO2 (small but reportable under CSI v3).
+                        Defaults are 1.55 (raw-meal/clinker ratio) and 0.002 (TOC fraction) — override only with lab data.
+                      </p>
                       <div className="field-row">
                         <NumField label="Raw meal / clinker ratio" step="0.01" value={ad.rawMeal.rawMealToClinkerRatio} onChange={(v) => patch((d) => (d.activityData.rawMeal.rawMealToClinkerRatio = v))} hint="Default 1.55" />
                         <NumField label="TOC fraction" step="0.0001" value={ad.rawMeal.tocFraction} onChange={(v) => patch((d) => (d.activityData.rawMeal.tocFraction = v))} hint="Default 0.002" />
@@ -1110,6 +1126,10 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                   {ms.processEmissionMethod === 'US_EPA_CEMENT_BASED_FALLBACK' && (
                     <div className="form-card">
                       <h2>US EPA cement-based fallback inputs</h2>
+                      <p className="form-sub">
+                        Conservative fallback used when CSI / IPCC inputs aren&apos;t available: process CO2 =
+                        cement produced × clinker-to-cement ratio × clinker EF. Use only when better data is missing.
+                      </p>
                       <div className="field-row">
                         <NumField label="Cement produced" unit="t" value={ad.usEpaFallback.cementProducedTonnes} onChange={(v) => patch((d) => (d.activityData.usEpaFallback.cementProducedTonnes = v))} />
                         <NumField label="Clinker / cement ratio" step="0.01" value={ad.usEpaFallback.clinkerToCementRatio} onChange={(v) => patch((d) => (d.activityData.usEpaFallback.clinkerToCementRatio = v))} />
@@ -1308,18 +1328,20 @@ function FuelTable({
   return (
     <div className="form-card">
       <h2>{title}</h2>
+      <p className="form-sub">
+        Fossil CO2 + CH4 + N2O are gross Scope 1; biomass CO2 is a separate memo item (excluded from gross).
+        Use <b>Advanced overrides</b> only when plant-specific LHV / emission factors differ from the library default.
+      </p>
       {entries.length === 0 && <p className="form-sub">No fuel rows yet — click <b>Add fuel</b> to start.</p>}
       {entries.map((e, i) => {
         const rowCO2 = fuelRowCO2(trace, e.label)
-        const hasOverride =
+        const hasFactorOverride =
           e.lhvGjPerUnit != null ||
           e.co2EfKgPerGj != null ||
           e.ch4EfKgPerGj != null ||
           e.n2oEfKgPerGj != null ||
-          e.biomassFraction != null ||
-          !!e.overrideReason ||
-          !!e.evidenceReference
-        const isOpen = expanded.has(e.id) || hasOverride
+          e.biomassFraction != null
+        const isOpen = expanded.has(e.id) || hasFactorOverride
         return (
           <div key={e.id} className="entry-card">
             <div className="entry-card-head">
@@ -1389,69 +1411,65 @@ function FuelTable({
               )}
             </div>
 
+            <details className="entry-evidence" open={!!(e.evidenceReference || e.overrideReason)}>
+              <summary>Evidence &amp; notes</summary>
+              <div className="field-row">
+                <label className="field">
+                  Evidence reference
+                  <input
+                    value={e.evidenceReference ?? ''}
+                    placeholder="e.g. ERP fuel report 2026 · meter log · supplier invoice"
+                    onChange={(ev) => upd(e.id, (f) => (f.evidenceReference = ev.target.value))}
+                  />
+                </label>
+                <label className="field">
+                  Notes / override reason
+                  <input
+                    value={e.overrideReason ?? ''}
+                    placeholder="Required when any factor on this row is overridden"
+                    onChange={(ev) => upd(e.id, (f) => (f.overrideReason = ev.target.value))}
+                  />
+                </label>
+              </div>
+            </details>
+
             <button className="advanced-toggle" onClick={() => toggle(e.id)}>
-              {isOpen ? '▴' : '▾'} Advanced overrides {hasOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
+              {isOpen ? '▴' : '▾'} Advanced overrides {hasFactorOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
             </button>
 
             {isOpen && (
-              <>
-                <div className="entry-card-section">
-                  <div className="entry-card-section-label">Factor overrides (blank = use library default)</div>
-                  {method === 'ENERGY_BASED' && (
-                    <>
-                      <div className="field-row">
-                        <NumField label="LHV override" unit="GJ/unit" step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (f) => (f.lhvGjPerUnit = v))} />
-                        <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.co2EfKgPerGj = v))} />
-                        <NumField label="Biomass fraction" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} />
-                      </div>
-                      <div className="field-row">
-                        <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.ch4EfKgPerGj = v))} />
-                        <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.n2oEfKgPerGj = v))} />
-                      </div>
-                    </>
-                  )}
-                  {method !== 'ENERGY_BASED' && (
+              <div className="entry-card-section">
+                <div className="entry-card-section-label">Factor overrides (blank = use library default)</div>
+                {method === 'ENERGY_BASED' && (
+                  <>
                     <div className="field-row">
+                      <NumField label="LHV override" unit="GJ/unit" step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (f) => (f.lhvGjPerUnit = v))} hint="blank = library default" />
+                      <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.co2EfKgPerGj = v))} hint="blank = library default" />
                       <NumField label="Biomass fraction" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} hint="0–1" />
                     </div>
-                  )}
-                </div>
-                <div className="entry-card-section">
-                  <div className="entry-card-section-label">Audit</div>
+                    <div className="field-row">
+                      <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.ch4EfKgPerGj = v))} hint="blank = library default" />
+                      <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (f) => (f.n2oEfKgPerGj = v))} hint="blank = library default" />
+                    </div>
+                  </>
+                )}
+                {method !== 'ENERGY_BASED' && (
                   <div className="field-row">
-                    <label className="field" style={{ gridColumn: 'span 2' }}>
-                      Override reason
-                      <input
-                        value={e.overrideReason ?? ''}
-                        placeholder="Required when any factor on this row is overridden"
-                        onChange={(ev) => upd(e.id, (f) => (f.overrideReason = ev.target.value))}
-                      />
-                    </label>
-                    <label className="field">
-                      Evidence reference
-                      <input
-                        value={e.evidenceReference ?? ''}
-                        placeholder="e.g. ERP fuel report 2026"
-                        onChange={(ev) => upd(e.id, (f) => (f.evidenceReference = ev.target.value))}
-                      />
-                    </label>
+                    <NumField label="Biomass fraction" step="0.01" value={e.biomassFraction ?? null} onChange={(v) => upd(e.id, (f) => (f.biomassFraction = v))} hint="0–1" />
                   </div>
-                </div>
-              </>
+                )}
+              </div>
             )}
 
             <div className="entry-formula">
               {method === 'ENERGY_BASED' && (
-                <>Formula: quantity × LHV ÷ 1000 × CO2 EF = tCO2 &nbsp;·&nbsp; fossil part → Scope 1, biomass fraction → memo</>
+                <>quantity × LHV ÷ 1000 × CO2 EF = tCO2 · <b>fossil → Scope 1</b> · biomass → memo (excluded) · CH4/N2O → Scope 1 via GWP</>
               )}
               {method === 'CARBON_CONTENT_BASED' && (
-                <>Formula: quantity (t) × carbon content fraction × (44/12) = tCO2</>
+                <>quantity (t) × carbon content fraction × 44/12 = tCO2 · <b>fossil → Scope 1</b> · biomass → memo</>
               )}
               {method === 'DIRECT_MEASUREMENT' && (
-                <>
-                  Formula: directly metered tCO2 (e.g. from CEMS). <b>Note:</b> the CH4/N2O addendum needs
-                  a fuel energy basis and is therefore not computed for direct-measurement rows.
-                </>
+                <>directly metered tCO2 (e.g. CEMS). <b>Note:</b> CH4/N2O addendum needs a fuel energy basis and isn&apos;t computed for direct-measurement rows.</>
               )}
             </div>
           </div>
@@ -1511,20 +1529,23 @@ function MobileTable({
   return (
     <div className="form-card">
       <h2>Mobile combustion (owned / controlled = Scope 1)</h2>
+      <p className="form-sub">
+        Plant-owned or operationally-controlled vehicles and equipment are gross Scope 1.
+        Third-party transport (logistics contractors, employee commute) is <b>Scope 3</b> and excluded here.
+        Use <b>Advanced overrides</b> only when fleet-specific LHV / EFs differ from the library default.
+      </p>
       {entries.length === 0 && (
         <p className="form-sub">No mobile equipment yet — click <b>Add mobile equipment</b> to start.</p>
       )}
       {entries.map((e, i) => {
         const rowCO2 = mobileRowCO2(trace, e.label)
         const isNonCanonical = e.fuelCode === 'diesel' && e.quantityUnit !== 'L'
-        const hasOverride =
+        const hasFactorOverride =
           e.lhvGjPerUnit != null ||
           e.co2EfKgPerGj != null ||
           e.ch4EfKgPerGj != null ||
-          e.n2oEfKgPerGj != null ||
-          !!e.overrideReason ||
-          !!e.evidenceReference
-        const isOpen = expanded.has(e.id) || hasOverride || isNonCanonical
+          e.n2oEfKgPerGj != null
+        const isOpen = expanded.has(e.id) || hasFactorOverride || isNonCanonical
         return (
           <div key={e.id} className="entry-card">
             <div className="entry-card-head">
@@ -1632,56 +1653,55 @@ function MobileTable({
               )}
             </div>
 
+            <details className="entry-evidence" open={!!(e.evidenceReference || e.overrideReason)}>
+              <summary>Evidence &amp; notes</summary>
+              <div className="field-row">
+                <label className="field">
+                  Evidence reference
+                  <input
+                    value={e.evidenceReference ?? ''}
+                    placeholder="e.g. fleet fuel-card statement · pump dispenser log"
+                    onChange={(ev) => upd(e.id, (m) => (m.evidenceReference = ev.target.value))}
+                  />
+                </label>
+                <label className="field">
+                  Notes / override reason
+                  <input
+                    value={e.overrideReason ?? ''}
+                    placeholder="Required when LHV/EF differs from library default"
+                    onChange={(ev) => upd(e.id, (m) => (m.overrideReason = ev.target.value))}
+                  />
+                </label>
+              </div>
+            </details>
+
             <button className="advanced-toggle" onClick={() => toggle(e.id)}>
-              {isOpen ? '▴' : '▾'} Advanced overrides {hasOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
+              {isOpen ? '▴' : '▾'} Advanced overrides {hasFactorOverride && <span className="entry-badge entry-badge-mixed" style={{ marginLeft: 6 }}>customised</span>}
             </button>
 
             {isOpen && (
-              <>
-                <div className="entry-card-section">
-                  <div className="entry-card-section-label">Factor overrides (blank = library default)</div>
-                  <div className="field-row">
-                    <NumField label="LHV override" unit={`GJ/${e.quantityUnit}`} step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (m) => (m.lhvGjPerUnit = v))} />
-                    <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.co2EfKgPerGj = v))} />
-                  </div>
-                  <div className="field-row">
-                    <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.ch4EfKgPerGj = v))} />
-                    <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.n2oEfKgPerGj = v))} />
-                  </div>
+              <div className="entry-card-section">
+                <div className="entry-card-section-label">Factor overrides (blank = library default)</div>
+                <div className="field-row">
+                  <NumField label="LHV override" unit={`GJ/${e.quantityUnit}`} step="0.0001" value={e.lhvGjPerUnit ?? null} onChange={(v) => upd(e.id, (m) => (m.lhvGjPerUnit = v))} hint="blank = library default" />
+                  <NumField label="CO2 EF override" unit="kg/GJ" step="0.01" value={e.co2EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.co2EfKgPerGj = v))} hint="blank = library default" />
                 </div>
-                <div className="entry-card-section">
-                  <div className="entry-card-section-label">Audit</div>
-                  <div className="field-row">
-                    <label className="field" style={{ gridColumn: 'span 2' }}>
-                      Override reason
-                      <input
-                        value={e.overrideReason ?? ''}
-                        placeholder="Required when LHV/EF differs from library default"
-                        onChange={(ev) => upd(e.id, (m) => (m.overrideReason = ev.target.value))}
-                      />
-                    </label>
-                    <label className="field">
-                      Evidence reference
-                      <input
-                        value={e.evidenceReference ?? ''}
-                        placeholder="e.g. fleet fuel card statement"
-                        onChange={(ev) => upd(e.id, (m) => (m.evidenceReference = ev.target.value))}
-                      />
-                    </label>
-                  </div>
+                <div className="field-row">
+                  <NumField label="CH4 EF override" unit="kg/GJ" step="0.0001" value={e.ch4EfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.ch4EfKgPerGj = v))} hint="blank = library default" />
+                  <NumField label="N2O EF override" unit="kg/GJ" step="0.0001" value={e.n2oEfKgPerGj ?? null} onChange={(v) => upd(e.id, (m) => (m.n2oEfKgPerGj = v))} hint="blank = library default" />
                 </div>
-              </>
+              </div>
             )}
 
             <div className="entry-formula">
               {method === 'FUEL_BASED' && (
-                <>Formula: Fuel qty ({e.quantityUnit}) × LHV (GJ/{e.quantityUnit}) ÷ 1000 × CO2 EF (kg/GJ) = tCO2</>
+                <>fuel qty ({e.quantityUnit}) × LHV (GJ/{e.quantityUnit}) ÷ 1000 × CO2 EF (kg/GJ) = tCO2 · <b>owned → Scope 1</b> · third-party → Scope 3 (excluded)</>
               )}
               {method === 'EQUIPMENT_HOURS_BASED' && (
-                <>Formula: hrs × consumption ({e.quantityUnit}/hr) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2</>
+                <>hrs × consumption ({e.quantityUnit}/hr) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2 · <b>owned → Scope 1</b> · third-party → Scope 3 (excluded)</>
               )}
               {method === 'DISTANCE_BASED' && (
-                <>Formula: km × fuel-per-km ({e.quantityUnit}/km) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2</>
+                <>km × fuel-per-km ({e.quantityUnit}/km) → fuel qty, then × LHV ÷ 1000 × CO2 EF = tCO2 · <b>owned → Scope 1</b> · third-party → Scope 3 (excluded)</>
               )}
             </div>
           </div>
