@@ -803,6 +803,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
   const [importError, setImportError] = useState<string | null>(null)
   const [hasDraft, setHasDraft] = useState(false)
   const [step2Tried, setStep2Tried] = useState(false)
+  const [step3Tried, setStep3Tried] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   // restore draft (theme stays at the explicit user choice; do NOT auto-flip to OS dark mode)
@@ -831,7 +832,21 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     setP(emptyPulpPaperPayload()); setStep(1); setResult(null); setHasDraft(false)
   }
 
-  function loadSample() { setP(sampleKraftMill()); setStep(2); setResult(null); setHasDraft(true) }
+  async function loadSample() {
+    const sample = sampleKraftMill()
+    setP(sample)
+    saveDraft(sample)
+    setHasDraft(true)
+    setBusy(true)
+    try {
+      const r = await fetch('/api/v1/calculations/pulp-paper/calculate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sample),
+      })
+      const data = await r.json()
+      setResult(data.result as PulpPaperCalculationResult)
+      setStep(5)
+    } finally { setBusy(false) }
+  }
 
   function importJson(file: File) {
     const reader = new FileReader()
@@ -904,6 +919,25 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     && emailRe.test((p.organization.contactEmail ?? '').trim())
   const facilityValid = !!p.facility.name.trim() && !!p.facility.millType
 
+  // Validation gates on the step-progress nav: clicking a forward step that
+  // isn't yet reachable redirects back to the first incomplete step and
+  // surfaces inline field errors (step2Tried / step3Tried).
+  const canReach = (target: number): boolean => {
+    if (target <= 2) return true
+    if (target === 3) return orgValid
+    if (target === 4) return orgValid && facilityValid
+    if (target === 5) return orgValid && facilityValid && !!result
+    return false
+  }
+  function tryGoTo(target: number) {
+    if (target === step) return
+    if (target < step) return setStep(target)
+    if (target > 2 && !orgValid) { setStep2Tried(true); return setStep(2) }
+    if (target > 3 && !facilityValid) { setStep3Tried(true); return setStep(3) }
+    if (target === 5 && !result) return setStep(4)
+    setStep(target)
+  }
+
   const trace = (live?.calculationTrace ?? result?.calculationTrace) as TraceEntry[] | undefined
 
   const COL_GRID = '2.5fr 1fr 1fr 1fr 1fr'
@@ -939,8 +973,15 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
       <nav className="wizard-progress">
         {(['Sector','Organisation','Facility & methods','Activity data','Review & report'] as const).map((label, i) => {
           const target = i + 1
+          const reachable = canReach(target)
           return (
-            <button key={label} className={step === target ? 'active' : step > target ? 'complete' : ''} onClick={() => setStep(target)}>
+            <button
+              key={label}
+              className={step === target ? 'active' : step > target ? 'complete' : ''}
+              onClick={() => tryGoTo(target)}
+              disabled={!reachable && target !== step}
+              aria-disabled={!reachable && target !== step}
+            >
               <span>{target}</span>
               <b>{label}</b>
             </button>
@@ -964,7 +1005,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <input ref={fileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={(e) => { const f = e.target.files?.[0]; if (f) importJson(f); e.currentTarget.value = '' }} />
                 <button className="btn ghost" onClick={() => fileRef.current?.click()}>Load JSON</button>
-                <button className="add-entry-btn" onClick={loadSample}>Try with sample data →</button>
+                <button className="add-entry-btn" onClick={loadSample} disabled={busy}>{busy ? 'Loading…' : 'Try with sample data →'}</button>
               </div>
             </div>
             {importError && <p className="field-error" style={{ marginTop: -6, marginBottom: 12 }}>{importError}</p>}
@@ -1117,8 +1158,11 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
             </div>
             <div className="step-footer">
               <button className="btn ghost" onClick={() => setStep(2)}>Back</button>
-              <button className="btn primary" disabled={!facilityValid} onClick={() => setStep(4)}>Continue</button>
+              <button className="btn primary" onClick={() => { setStep3Tried(true); if (facilityValid) setStep(4) }}>Continue</button>
             </div>
+            {step3Tried && !facilityValid && (
+              <p className="field-error" style={{ marginTop: 6 }}>Mill name and mill type are required before continuing.</p>
+            )}
           </section>
         )}
 
