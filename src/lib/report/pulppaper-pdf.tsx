@@ -84,13 +84,16 @@ function ReportDoc({ payload, result }: { payload: PulpPaperInputPayload; result
           </>
         )}
 
-        <Text style={rs.section}>Intensity</Text>
-        {im.co2ePerAdtPulp != null && <Line label="Per air-dry tonne pulp (ADt)" value={num(im.co2ePerAdtPulp)} unit="kgCO2e/ADt" />}
-        {im.co2ePerTonnePaper != null && <Line label="Per tonne paper" value={num(im.co2ePerTonnePaper)} unit="kgCO2e/t" />}
-        {im.co2ePerTonneBoard != null && <Line label="Per tonne board" value={num(im.co2ePerTonneBoard)} unit="kgCO2e/t" />}
-        {im.fossilCo2PerAdtPulp != null && <Line label="Fossil CO2 per ADt pulp" value={num(im.fossilCo2PerAdtPulp)} unit="kgCO2/ADt" />}
+        <Text style={rs.section}>Production &amp; intensity</Text>
+        {payload.activityData.production.airDryPulpTonnes != null && <Line label="Air-dry pulp produced" value={num(payload.activityData.production.airDryPulpTonnes)} unit="ADt" />}
+        {payload.activityData.production.paperProducedTonnes != null && <Line label="Paper produced" value={num(payload.activityData.production.paperProducedTonnes)} unit="t" />}
+        {payload.activityData.production.boardProducedTonnes != null && <Line label="Board produced" value={num(payload.activityData.production.boardProducedTonnes)} unit="t" />}
+        {im.co2ePerAdtPulp != null && <Line label="→ Intensity per ADt pulp" value={num(im.co2ePerAdtPulp)} unit="kgCO2e/ADt" />}
+        {im.co2ePerTonnePaper != null && <Line label="→ Intensity per tonne paper" value={num(im.co2ePerTonnePaper)} unit="kgCO2e/t" />}
+        {im.co2ePerTonneBoard != null && <Line label="→ Intensity per tonne board" value={num(im.co2ePerTonneBoard)} unit="kgCO2e/t" />}
+        {im.fossilCo2PerAdtPulp != null && <Line label="→ Fossil CO2 per ADt pulp" value={num(im.fossilCo2PerAdtPulp)} unit="kgCO2/ADt" />}
         {im.co2ePerAdtPulp == null && im.co2ePerTonnePaper == null && im.co2ePerTonneBoard == null && (
-          <Text style={rs.note}>No production denominators entered; intensity metrics unavailable.</Text>
+          <Text style={rs.note}>No production volumes entered; intensity metrics unavailable.</Text>
         )}
 
         {result.chpAllocations.length > 0 && (

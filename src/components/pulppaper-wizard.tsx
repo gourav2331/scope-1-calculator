@@ -1299,15 +1299,32 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               </div>
             )}
 
-            {(result.intensityMetrics.co2ePerAdtPulp != null || result.intensityMetrics.co2ePerTonnePaper != null || result.intensityMetrics.co2ePerTonneBoard != null) && (
+            {/* Production & intensity — production volumes ARE the denominators */}
+            {((p.activityData.production.airDryPulpTonnes ?? 0) > 0 || (p.activityData.production.paperProducedTonnes ?? 0) > 0 || (p.activityData.production.boardProducedTonnes ?? 0) > 0) && (
               <div className="form-card">
-                <h2>Intensity</h2>
+                <h2>Production &amp; intensity</h2>
+                <p className="form-sub">Reporting-period production volumes (the denominators) and the derived emission intensities (kgCO2e per unit produced).</p>
                 <div className="summary-cats">
-                  {result.intensityMetrics.co2ePerAdtPulp != null && <div className="summary-card"><span>Per ADt pulp</span><strong>{fmt.format(result.intensityMetrics.co2ePerAdtPulp)}</strong><small>kgCO2e / ADt</small></div>}
-                  {result.intensityMetrics.co2ePerTonnePaper != null && <div className="summary-card"><span>Per t paper</span><strong>{fmt.format(result.intensityMetrics.co2ePerTonnePaper)}</strong><small>kgCO2e / t</small></div>}
-                  {result.intensityMetrics.co2ePerTonneBoard != null && <div className="summary-card"><span>Per t board</span><strong>{fmt.format(result.intensityMetrics.co2ePerTonneBoard)}</strong><small>kgCO2e / t</small></div>}
-                  {result.intensityMetrics.fossilCo2PerAdtPulp != null && <div className="summary-card"><span>Fossil CO2 / ADt</span><strong>{fmt.format(result.intensityMetrics.fossilCo2PerAdtPulp)}</strong><small>kgCO2 / ADt</small></div>}
+                  {(p.activityData.production.airDryPulpTonnes ?? 0) > 0 && (
+                    <div className="summary-card"><span>Air-dry pulp produced</span><strong>{fmt.format(p.activityData.production.airDryPulpTonnes ?? 0)}</strong><small>ADt</small></div>
+                  )}
+                  {(p.activityData.production.paperProducedTonnes ?? 0) > 0 && (
+                    <div className="summary-card"><span>Paper produced</span><strong>{fmt.format(p.activityData.production.paperProducedTonnes ?? 0)}</strong><small>t</small></div>
+                  )}
+                  {(p.activityData.production.boardProducedTonnes ?? 0) > 0 && (
+                    <div className="summary-card"><span>Board produced</span><strong>{fmt.format(p.activityData.production.boardProducedTonnes ?? 0)}</strong><small>t</small></div>
+                  )}
+                  {result.intensityMetrics.co2ePerAdtPulp != null && <div className="summary-card"><span>Intensity per ADt pulp</span><strong>{fmt.format(result.intensityMetrics.co2ePerAdtPulp)}</strong><small>kgCO2e / ADt</small></div>}
+                  {result.intensityMetrics.co2ePerTonnePaper != null && <div className="summary-card"><span>Intensity per t paper</span><strong>{fmt.format(result.intensityMetrics.co2ePerTonnePaper)}</strong><small>kgCO2e / t</small></div>}
+                  {result.intensityMetrics.co2ePerTonneBoard != null && <div className="summary-card"><span>Intensity per t board</span><strong>{fmt.format(result.intensityMetrics.co2ePerTonneBoard)}</strong><small>kgCO2e / t</small></div>}
+                  {result.intensityMetrics.fossilCo2PerAdtPulp != null && <div className="summary-card"><span>Fossil CO2 / ADt pulp</span><strong>{fmt.format(result.intensityMetrics.fossilCo2PerAdtPulp)}</strong><small>kgCO2 / ADt</small></div>}
                 </div>
+              </div>
+            )}
+            {!((p.activityData.production.airDryPulpTonnes ?? 0) > 0 || (p.activityData.production.paperProducedTonnes ?? 0) > 0 || (p.activityData.production.boardProducedTonnes ?? 0) > 0) && (
+              <div className="form-card">
+                <h2>Production &amp; intensity</h2>
+                <p className="form-sub">No production volumes entered — intensity metrics (kgCO2e / ADt pulp, t paper, t board) are unavailable. Add production volumes on Step 4 &rarr; <b>Production</b> tab to enable them.</p>
               </div>
             )}
 
