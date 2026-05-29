@@ -89,20 +89,51 @@ type Cat =
   | 'transfer'
   | 'reported'
 
-const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }> }[] = [
-  { key: 'production', label: 'Production', icon: Boxes },
-  { key: 'stationary', label: 'Stationary', icon: Flame },
-  { key: 'biomass', label: 'Biomass', icon: TreePine },
-  { key: 'limeKiln', label: 'Lime kilns', icon: Factory },
-  { key: 'makeup', label: 'Make-up carbonates', icon: Hexagon },
-  { key: 'mobile', label: 'Mobile', icon: Truck },
-  { key: 'landfill', label: 'Landfills', icon: Recycle },
-  { key: 'wwt', label: 'Anaerobic WWT', icon: Droplets },
-  { key: 'refrigerant', label: 'Refrigerants', icon: Snowflake },
-  { key: 'chp', label: 'CHP allocation', icon: Zap },
-  { key: 'transfer', label: 'CO2 transfers', icon: Wind },
-  { key: 'reported', label: 'Reported', icon: FileText },
+const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; appKey?: keyof PulpPaperInputPayload['sourceApplicability'] }[] = [
+  { key: 'production', label: 'Production', icon: Boxes }, // always shown (intensity denominators)
+  { key: 'stationary', label: 'Stationary', icon: Flame, appKey: 'stationaryCombustion' },
+  { key: 'biomass', label: 'Biomass', icon: TreePine, appKey: 'biomassCombustion' },
+  { key: 'limeKiln', label: 'Lime kilns', icon: Factory, appKey: 'limeKilns' },
+  { key: 'makeup', label: 'Make-up carbonates', icon: Hexagon, appKey: 'makeupCarbonates' },
+  { key: 'mobile', label: 'Mobile', icon: Truck, appKey: 'mobile' },
+  { key: 'landfill', label: 'Landfills', icon: Recycle, appKey: 'landfills' },
+  { key: 'wwt', label: 'Anaerobic WWT', icon: Droplets, appKey: 'anaerobicWwt' },
+  { key: 'refrigerant', label: 'Refrigerants', icon: Snowflake, appKey: 'refrigerants' },
+  { key: 'chp', label: 'CHP allocation', icon: Zap, appKey: 'chpAllocation' },
+  { key: 'transfer', label: 'CO2 transfers', icon: Wind, appKey: 'co2Transfers' },
+  { key: 'reported', label: 'Reported', icon: FileText, appKey: 'reported' },
 ]
+
+/**
+ * Source-applicability defaults per mill type — derived from FRS §3 decision tree.
+ * Paper-only mills do NOT have recovery furnaces, lime kilns, biomass boilers,
+ * mill landfills, or anaerobic WWT (typically). Kraft / integrated mills DO.
+ * Users can override every flag via the applicability panel on Step 4.
+ */
+const MILL_APPLICABILITY_DEFAULTS: Record<PulpPaperInputPayload['facility']['millType'], PulpPaperInputPayload['sourceApplicability']> = {
+  KRAFT:       { stationaryCombustion: true,  biomassCombustion: true,  limeKilns: true,  makeupCarbonates: true,  mobile: true, landfills: true,  anaerobicWwt: false, refrigerants: true, chpAllocation: true, co2Transfers: true, reported: true, purchasedElectricity: true },
+  SULFITE:     { stationaryCombustion: true,  biomassCombustion: true,  limeKilns: false, makeupCarbonates: false, mobile: true, landfills: true,  anaerobicWwt: false, refrigerants: true, chpAllocation: true, co2Transfers: false, reported: true, purchasedElectricity: true },
+  RECYCLED:    { stationaryCombustion: true,  biomassCombustion: false, limeKilns: false, makeupCarbonates: false, mobile: true, landfills: true,  anaerobicWwt: true,  refrigerants: true, chpAllocation: true, co2Transfers: false, reported: true, purchasedElectricity: true },
+  MECHANICAL:  { stationaryCombustion: true,  biomassCombustion: false, limeKilns: false, makeupCarbonates: false, mobile: true, landfills: false, anaerobicWwt: false, refrigerants: true, chpAllocation: true, co2Transfers: false, reported: true, purchasedElectricity: true },
+  PAPER_ONLY:  { stationaryCombustion: true,  biomassCombustion: false, limeKilns: false, makeupCarbonates: false, mobile: true, landfills: false, anaerobicWwt: false, refrigerants: true, chpAllocation: true, co2Transfers: false, reported: true, purchasedElectricity: true },
+  INTEGRATED:  { stationaryCombustion: true,  biomassCombustion: true,  limeKilns: true,  makeupCarbonates: true,  mobile: true, landfills: true,  anaerobicWwt: true,  refrigerants: true, chpAllocation: true, co2Transfers: true, reported: true, purchasedElectricity: true },
+  MIXED:       { stationaryCombustion: true,  biomassCombustion: true,  limeKilns: true,  makeupCarbonates: true,  mobile: true, landfills: true,  anaerobicWwt: true,  refrigerants: true, chpAllocation: true, co2Transfers: true, reported: true, purchasedElectricity: true },
+}
+
+const APPLICABILITY_LABELS: Record<keyof PulpPaperInputPayload['sourceApplicability'], string> = {
+  stationaryCombustion: 'Stationary combustion (boilers, IR dryers, RTOs, turbines)',
+  biomassCombustion: 'Biomass combustion (bark, hog fuel, black liquor, biogas, NCG)',
+  limeKilns: 'Kraft mill lime kilns / calciners',
+  makeupCarbonates: 'Make-up CaCO3 / Na2CO3 / dolomite',
+  mobile: 'Mobile / on-site equipment (forklifts, yard trucks, forestry)',
+  landfills: 'Mill-owned landfill (CH4)',
+  anaerobicWwt: 'Anaerobic wastewater treatment / sludge digester',
+  refrigerants: 'Refrigerant HFC fugitives (chillers, AC)',
+  chpAllocation: 'CHP heat/power allocation (analytical only)',
+  co2Transfers: 'Fossil CO2 exports / imports (PCC plant etc.)',
+  reported: 'Reported / direct-entry (corporate aggregate disclosure)',
+  purchasedElectricity: 'Purchased electricity (supporting Scope 2)',
+}
 
 /* ----------------------------- empty payload ----------------------------- */
 
@@ -822,6 +853,33 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     if (step === 1) { setStep2Tried(false); setStep3Tried(false) }
   }, [step])
 
+  // If user toggles the currently-open category OFF, snap to Production (always visible)
+  useEffect(() => {
+    const meta = CATEGORIES.find((c) => c.key === cat)
+    if (meta?.appKey && p.sourceApplicability[meta.appKey] === false) {
+      setCat('production')
+    }
+  }, [cat, p.sourceApplicability])
+
+  // Auto-derive source applicability defaults from the selected mill type
+  // (paper-only mills don't have recovery furnaces, lime kilns, biomass etc.).
+  // User can still override each flag on Step 4. We only refresh when mill type
+  // actually changes — don't clobber a hand-edited applicability set otherwise.
+  const prevMillTypeRef = useRef<string | null>(null)
+  useEffect(() => {
+    const mt = p.facility.millType
+    if (mt && mt !== prevMillTypeRef.current) {
+      const defaults = MILL_APPLICABILITY_DEFAULTS[mt]
+      if (defaults && prevMillTypeRef.current !== null) {
+        // Only auto-update when user changes mill type after initial load,
+        // not on hydration of an existing draft.
+        patch((d) => (d.sourceApplicability = { ...defaults }))
+      }
+      prevMillTypeRef.current = mt
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.facility.millType])
+
   // autosave + debounced live calc
   useEffect(() => {
     saveDraft(p)
@@ -888,12 +946,15 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(p),
       })
       const data = await r.json()
-      setResult(data.result as PulpPaperCalculationResult)
+      const result = data.result as PulpPaperCalculationResult
+      // Surface the persisted calculationId on the result so Step 5 can show it.
+      if (data.calculationId && result) result.calculationId = data.calculationId
+      setResult(result)
       setStep(5)
     } finally { setBusy(false) }
   }
 
-  async function download(format: 'json' | 'xlsx' | 'pdf') {
+  async function download(format: 'json' | 'xlsx' | 'pdf' | 'csv') {
     const r = await fetch('/api/v1/calculations/pulp-paper/export', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ payload: p, format }),
@@ -1095,6 +1156,15 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                     Under <b>{p.organizationBoundary.boundaryMethod.toLowerCase().replace('_', ' ')}</b>, 100% of the mill&apos;s Scope 1 is reported. Switch to <b>Equity share</b> for a non-operating stake.
                   </p>
                 )}
+                <label className="field" style={{ marginTop: 14 }}>
+                  <span className="field-title">Boundary justification</span>
+                  <input
+                    value={p.organizationBoundary.justification ?? ''}
+                    placeholder="Brief narrative of why this boundary applies (e.g. 'Sole operator of the mill under a long-term lease; financial control aligns with consolidated reporting.')"
+                    onChange={(e) => patch((d) => (d.organizationBoundary.justification = e.target.value))}
+                  />
+                  <small className="form-sub">Optional but recommended for assurance (GHG Protocol Chapter 3). Saved with the audit trail.</small>
+                </label>
               </div>
               <div className="form-card contact-card">
                 <h2>Primary contact</h2>
@@ -1179,8 +1249,29 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
             <h1 className="step-title">Activity <em>data</em></h1>
             <p className="step-sub">The ten ICFPA categories plus reported. Leave a field blank for <b>missing</b>; type <b>0</b> only for a confirmed zero. <em>Biogenic CO2 is never in gross Scope 1.</em></p>
             <LiveTotals live={live} />
+
+            <div className="form-card">
+              <h2>Source applicability — what this mill actually operates</h2>
+              <p className="form-sub">
+                Auto-set from your <b>{p.facility.millType.toLowerCase().replace('_', ' ')}</b> mill type per the ICFPA decision tree. Toggle OFF any source this mill doesn&apos;t have to hide its tab. Source applicability is part of the audit trail.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px 16px', marginTop: 10 }}>
+                {(Object.entries(APPLICABILITY_LABELS) as [keyof PulpPaperInputPayload['sourceApplicability'], string][]).map(([k, label]) => (
+                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
+                    <input
+                      type="checkbox"
+                      checked={!!p.sourceApplicability[k]}
+                      onChange={(e) => patch((d) => (d.sourceApplicability[k] = e.target.checked))}
+                      style={{ width: 16, height: 16, accentColor: 'var(--purple)' }}
+                    />
+                    <span style={{ color: p.sourceApplicability[k] ? 'var(--ink)' : 'var(--ink-mute)' }}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="category-tabs">
-              {CATEGORIES.map(({ key, label, icon: Icon }) => (
+              {CATEGORIES.filter(c => !c.appKey || p.sourceApplicability[c.appKey] !== false).map(({ key, label, icon: Icon }) => (
                 <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
                   <Icon size={15} /> {label} <span>{counts[key]}</span>
                 </button>
@@ -1328,6 +1419,19 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               </div>
             )}
 
+            {result.assumptions.length > 0 && (
+              <div className="form-card">
+                <h2>Assumptions &amp; limitations</h2>
+                <p className="form-sub">Every default, fallback, override, and estimated basis the inventory relied on — the auditable trail for assurance.</p>
+                {result.assumptions.map((a, i) => (
+                  <p key={i} className="form-sub" style={{ margin: '4px 0' }}>
+                    <span className="entry-badge" style={{ marginRight: 8 }}>{a.kind.toLowerCase()}</span>
+                    <b>{a.label}</b> — {a.detail}
+                  </p>
+                ))}
+              </div>
+            )}
+
             {result.errors.length > 0 && (
               <div className="form-card" style={{ borderColor: '#c2410c' }}>
                 <h2><AlertCircle size={18} /> Validation errors</h2>
@@ -1344,12 +1448,27 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               <div className="form-card"><h2><CheckCircle2 size={18} /> Clean run</h2><p className="form-sub">No validation issues raised.</p></div>
             )}
 
+            <div className="form-card">
+              <h2>Audit trail</h2>
+              <p className="form-sub">
+                {result.calculationTrace.length} calculation steps · {result.factorSnapshots.length} factor snapshots recorded · methodology pack <b>{result.methodologyPack}</b> · GWP <b>{result.gwpSet.replace('_', ' · ')}</b>. Every override is captured with its reason. Click <b>Calculate &amp; save</b> below to persist this inventory; export an audit-ready Excel, PDF, JSON, or CSV bundle.
+              </p>
+              {result.calculationId && (
+                <p className="form-sub" style={{ marginTop: 8 }}>
+                  <span className="entry-badge entry-badge-s1" style={{ marginRight: 8 }}>saved</span>
+                  Calculation ID: <code>{result.calculationId}</code>
+                </p>
+              )}
+            </div>
+
             <div className="step-footer">
-              <button className="btn ghost" onClick={() => setStep(4)}>Back</button>
+              <button className="btn ghost" onClick={() => setStep(4)}>Back to data</button>
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button className="btn ghost" onClick={() => download('json')}><PenTool size={15} /> Download JSON</button>
-                <button className="btn ghost" onClick={() => download('xlsx')}><Leaf size={15} /> Excel report</button>
-                <button className="btn primary" onClick={() => download('pdf')}><FileText size={15} /> PDF report</button>
+                <button className="btn ghost" onClick={() => download('xlsx')}><Leaf size={15} /> Excel</button>
+                <button className="btn ghost" onClick={() => download('pdf')}><FileText size={15} /> PDF</button>
+                <button className="btn ghost" onClick={() => download('csv')}><FileText size={15} /> CSV</button>
+                <button className="btn ghost" onClick={() => download('json')}><PenTool size={15} /> JSON</button>
+                <button className="btn primary" onClick={() => runCalculate(true)} disabled={busy}>{busy ? 'Saving…' : 'Calculate & save'}</button>
               </div>
             </div>
           </section>

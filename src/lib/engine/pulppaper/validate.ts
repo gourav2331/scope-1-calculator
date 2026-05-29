@@ -162,6 +162,22 @@ export function validatePulpPaperInput(ctx: EngineContext, payload: PulpPaperInp
     if (typeof mwh === 'number' && mwh < 0) {
       ctx.error('negative_input_value', `Purchased electricity MWh cannot be negative.`, 'activityData.purchasedElectricity.mwh')
     }
+
+    // EF / NCV override justification gate (assurance requirement).
+    // Whenever a row supplies a factor override, an `overrideReason` MUST be set
+    // — otherwise the override is undocumented and would not survive an audit.
+    const checkOverride = (label: string, fields: Array<number | null | undefined>, reason: string | undefined, fieldBase: string) => {
+      const overridden = fields.some((v) => typeof v === 'number')
+      if (overridden && (!reason || !reason.trim())) {
+        ctx.error('override_without_reason', `"${label}" overrides a factor (NCV / EF) without an Evidence note / override reason. Add a reason to the row before submitting.`, `${fieldBase}.overrideReason`)
+      }
+    }
+    activityData.stationaryCombustion?.forEach((e) => checkOverride(e.label, [e.ncvGjPerUnit, e.co2EfKgPerGj, e.ch4EfKgPerGj, e.n2oEfKgPerGj, e.carbonContentFraction, e.oxidationFactor], e.overrideReason, `activityData.stationaryCombustion.${e.id}`))
+    activityData.biomassCombustion?.forEach((e) => checkOverride(e.label, [e.ncvGjPerUnit, e.biogenicCo2EfKgPerGj, e.ch4EfKgPerGj, e.n2oEfKgPerGj], e.overrideReason, `activityData.biomassCombustion.${e.id}`))
+    activityData.limeKilns?.forEach((e) => checkOverride(e.label, [e.ncvGjPerUnit, e.co2EfKgPerGj, e.ch4EfKgPerGj, e.n2oEfKgPerGj], e.overrideReason, `activityData.limeKilns.${e.id}`))
+    activityData.makeupCarbonates?.forEach((e) => checkOverride(e.label, [e.co2EfTonnesPerTonne], e.overrideReason, `activityData.makeupCarbonates.${e.id}`))
+    activityData.mobile?.forEach((e) => checkOverride(e.label, [e.ncvGjPerUnit, e.co2EfKgPerGj, e.ch4EfKgPerGj, e.n2oEfKgPerGj], e.overrideReason, `activityData.mobile.${e.id}`))
+    activityData.refrigerants?.forEach((e) => checkOverride(e.label, [e.gwpOverride], e.overrideReason, `activityData.refrigerants.${e.id}`))
   }
 
   // If user explicitly EXCLUDED a category but has data for it, flag for clarification.

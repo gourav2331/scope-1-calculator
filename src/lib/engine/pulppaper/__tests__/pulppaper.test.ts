@@ -178,6 +178,7 @@ describe('§11.5 CFB bark boiler + residual oil co-fire', () => {
       ncvGjPerUnit: 1,
       ch4EfKgPerGj: 0, // assume oil non-CO2 already counted via tech default — silence here
       n2oEfKgPerGj: 0,
+      overrideReason: 'Worked-example calibration (NCV normalised, oil non-CO2 zeroed since CFB tech factor applied to bark)',
     }
     // Bark CFB: 6,900 TJ → biogenic CO2 = 6,900,000×112/1000 = 772,800 t (memo); CH4 7.7 t × 27 = 207.9; N2O 67.76 × 273 = 18,498.
     const bark: BiomassEntry = {
@@ -188,6 +189,7 @@ describe('§11.5 CFB bark boiler + residual oil co-fire', () => {
       quantity: 6_900_000,
       quantityUnit: 'GJ',
       ncvGjPerUnit: 1,
+      overrideReason: 'Worked-example calibration (NCV normalised so qty equals energy in GJ)',
     }
     p.activityData.stationaryCombustion = [oil]
     p.activityData.biomassCombustion = [bark]

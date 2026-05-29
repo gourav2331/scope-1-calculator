@@ -284,6 +284,8 @@ export interface PulpPaperInputPayload {
     boundaryMethod: 'OPERATIONAL_CONTROL' | 'FINANCIAL_CONTROL' | 'EQUITY_SHARE'
     ownershipSharePercent?: number
     consolidationPercent?: number
+    /** GHG Protocol requires a written narrative of why this boundary applies (assurance). */
+    justification?: string
   }
   sector: { sectorCode: 'PULP_PAPER' }
   methodSelections: PulpPaperMethodSelections
