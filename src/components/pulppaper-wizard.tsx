@@ -954,14 +954,16 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     } finally { setBusy(false) }
   }
 
-  async function download(format: 'json' | 'xlsx' | 'pdf' | 'csv') {
+  async function download(format: 'json' | 'xlsx' | 'pdf' | 'csv' | 'audit-pack') {
     const r = await fetch('/api/v1/calculations/pulp-paper/export', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ payload: p, format }),
     })
     const blob = await r.blob()
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
-    a.download = `scope1-pulppaper-${p.facility.name || 'mill'}-FY${p.calculationContext.reportingPeriod.year}.${format}`
+    const ext = format === 'audit-pack' ? 'zip' : format
+    const suffix = format === 'audit-pack' ? '-audit-pack' : ''
+    a.download = `scope1-pulppaper-${p.facility.name || 'mill'}-FY${p.calculationContext.reportingPeriod.year}${suffix}.${ext}`
     document.body.appendChild(a); a.click(); a.remove()
   }
 
@@ -1468,6 +1470,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                 <button className="btn ghost" onClick={() => download('pdf')}><FileText size={15} /> PDF</button>
                 <button className="btn ghost" onClick={() => download('csv')}><FileText size={15} /> CSV</button>
                 <button className="btn ghost" onClick={() => download('json')}><PenTool size={15} /> JSON</button>
+                <button className="btn ghost" onClick={() => download('audit-pack')}><FileText size={15} /> Audit pack (.zip)</button>
                 <button className="btn primary" onClick={() => runCalculate(true)} disabled={busy}>{busy ? 'Saving…' : 'Calculate & save'}</button>
               </div>
             </div>
