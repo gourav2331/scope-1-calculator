@@ -954,6 +954,27 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
     } finally { setBusy(false) }
   }
 
+  async function lockInventory() {
+    if (!result?.calculationId) return
+    setBusy(true)
+    try {
+      const r = await fetch(`/api/v1/calculations/${result.calculationId}/lock`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: p.organization.contactName || 'system' }),
+      })
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}))
+        alert(`Lock failed: ${err.detail || err.error || r.statusText}`)
+        return
+      }
+      const data = await r.json()
+      setResult({
+        ...result,
+        auditStatus: { ...result.auditStatus, workflowStatus: data.workflowStatus, calculatedAt: result.auditStatus.calculatedAt },
+      })
+    } finally { setBusy(false) }
+  }
+
   async function download(format: 'json' | 'xlsx' | 'pdf' | 'csv' | 'audit-pack') {
     const r = await fetch('/api/v1/calculations/pulp-paper/export', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1453,12 +1474,29 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
             <div className="form-card">
               <h2>Audit trail</h2>
               <p className="form-sub">
-                {result.calculationTrace.length} calculation steps · {result.factorSnapshots.length} factor snapshots recorded · methodology pack <b>{result.methodologyPack}</b> · GWP <b>{result.gwpSet.replace('_', ' · ')}</b>. Every override is captured with its reason. Click <b>Calculate &amp; save</b> below to persist this inventory; export an audit-ready Excel, PDF, JSON, or CSV bundle.
+                {result.calculationTrace.length} calculation steps · {result.factorSnapshots.length} factor snapshots recorded · methodology pack <b>{result.methodologyPack}</b> · GWP <b>{result.gwpSet.replace('_', ' · ')}</b>. Every override is captured with its reason. Click <b>Calculate &amp; save</b> below to persist this inventory; export an audit-ready Excel, PDF, JSON, CSV, or full audit pack ZIP.
               </p>
-              {result.calculationId && (
-                <p className="form-sub" style={{ marginTop: 8 }}>
-                  <span className="entry-badge entry-badge-s1" style={{ marginRight: 8 }}>saved</span>
-                  Calculation ID: <code>{result.calculationId}</code>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginTop: 10 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--ink-mute)' }}>Workflow:</span>
+                {(() => {
+                  const ws = (result.auditStatus?.workflowStatus ?? 'DRAFT').toUpperCase()
+                  const styles: Record<string, { bg: string; fg: string; label: string }> = {
+                    DRAFT:    { bg: 'color-mix(in srgb, #6b7280 18%, transparent)', fg: '#374151', label: '✎ Draft' },
+                    LOCKED:   { bg: 'color-mix(in srgb, #2f6b4f 20%, transparent)', fg: '#15803d', label: '🔒 Locked' },
+                    VERIFIED: { bg: 'color-mix(in srgb, #2563eb 22%, transparent)', fg: '#1d4ed8', label: '✓ Verified' },
+                  }
+                  const s = styles[ws] ?? styles.DRAFT
+                  return <span style={{ background: s.bg, color: s.fg, borderRadius: 999, fontSize: 11.5, fontWeight: 800, letterSpacing: 0.3, padding: '4px 10px' }}>{s.label}</span>
+                })()}
+                {result.calculationId && (
+                  <span style={{ fontSize: 12, color: 'var(--ink-mute)' }}>
+                    Calculation ID: <code style={{ fontFamily: 'monospace', fontSize: 11.5 }}>{result.calculationId}</code>
+                  </span>
+                )}
+              </div>
+              {result.auditStatus?.workflowStatus?.toUpperCase() === 'LOCKED' && (
+                <p className="form-sub" style={{ marginTop: 10, color: '#15803d', fontWeight: 600 }}>
+                  This inventory is locked. The result cannot be recalculated against this row without unlocking. Re-runs create a new revision.
                 </p>
               )}
             </div>
@@ -1471,7 +1509,18 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                 <button className="btn ghost" onClick={() => download('csv')}><FileText size={15} /> CSV</button>
                 <button className="btn ghost" onClick={() => download('json')}><PenTool size={15} /> JSON</button>
                 <button className="btn ghost" onClick={() => download('audit-pack')}><FileText size={15} /> Audit pack (.zip)</button>
-                <button className="btn primary" onClick={() => runCalculate(true)} disabled={busy}>{busy ? 'Saving…' : 'Calculate & save'}</button>
+                {result.auditStatus?.workflowStatus?.toUpperCase() === 'LOCKED' ? (
+                  <button className="btn primary" disabled style={{ background: '#15803d', opacity: 0.85 }}>🔒 Locked</button>
+                ) : (
+                  <>
+                    <button className="btn primary" onClick={() => runCalculate(true)} disabled={busy}>{busy ? 'Saving…' : 'Calculate & save'}</button>
+                    {result.calculationId && (
+                      <button className="btn primary" onClick={lockInventory} disabled={busy || result.errors.length > 0} title={result.errors.length > 0 ? 'Resolve validation errors before locking' : 'Lock this inventory'} style={{ background: '#15803d' }}>
+                        {busy ? 'Locking…' : '🔒 Submit & lock'}
+                      </button>
+                    )}
+                  </>
+                )}
               </div>
             </div>
           </section>

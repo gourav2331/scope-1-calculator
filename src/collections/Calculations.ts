@@ -25,6 +25,23 @@ export const Calculations: CollectionConfig = {
       required: true,
       options: ['draft', 'calculated', 'success_with_warnings', 'blocked'],
     },
+    /**
+     * Workflow state for assurance — independent of the engine `status` above.
+     * Mirrors the FRS state machine Draft → Submitted → Under review → Locked
+     * → Verified. UI today exposes Draft → Locked (single-user sign-off);
+     * maker-checker with separate roles is a follow-up.
+     */
+    {
+      name: 'workflowStatus',
+      type: 'select',
+      defaultValue: 'draft',
+      required: true,
+      options: ['draft', 'submitted', 'under_review', 'locked', 'verified'],
+    },
+    { name: 'lockedAt', type: 'date' },
+    { name: 'lockedBy', type: 'text' },
+    { name: 'verifiedAt', type: 'date' },
+    { name: 'verifiedBy', type: 'text' },
     { name: 'sectorCode', type: 'text', defaultValue: 'CEMENT' },
     { name: 'gwpSet', type: 'text', defaultValue: 'AR6' },
     { name: 'grossScope1Tonnes', type: 'number', defaultValue: 0 },
