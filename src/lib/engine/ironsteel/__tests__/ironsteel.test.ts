@@ -480,3 +480,135 @@ describe('GWP horizon switch', () => {
     expect(r.scope1.byCategory.fugitiveSF6.co2eTonnes).toBeCloseTo(25.2, 1)
   })
 })
+
+/* ----------------------------------------------------------------- */
+/*  QA Tier A — consultant-flagged assurance gates                   */
+/* ----------------------------------------------------------------- */
+
+describe('QA #3 — BF/BOF Tier 1 + coke + sinter double-counting BLOCKED', () => {
+  it('blocks when BF/BOF Tier 1 integrated + separate Tier 1 coke + sinter are mixed', () => {
+    const p = baseIronSteelPayload()
+    p.activityData.bfBof = [{ id: 'b', label: 'Integrated', method: 'TIER1_INTEGRATED', crudeSteelProducedTonnes: 1_000_000 }]
+    p.activityData.cokeOven = [{ id: 'c', label: 'Coke', method: 'TIER1_DEFAULT', cokeProducedTonnes: 500_000 }]
+    p.activityData.sinter = [{ id: 's', label: 'Sinter', method: 'TIER1_DEFAULT', sinterProducedTonnes: 1_200_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).toContain('double_counting_bfbof_tier1_includes_coke_sinter')
+    expect(r.status).toBe('BLOCKED')
+  })
+
+  it('allows BF/BOF Tier 2 carbon balance alongside separate coke and sinter (no double-count)', () => {
+    const p = baseIronSteelPayload()
+    p.activityData.bfBof = [{ id: 'b', label: 'BF + BOF Tier 2', method: 'TIER2_CARBON_BALANCE', crudeSteelProducedTonnes: 1_000_000 }]
+    p.activityData.cokeOven = [{ id: 'c', label: 'Coke', method: 'TIER1_DEFAULT', cokeProducedTonnes: 500_000 }]
+    p.activityData.sinter = [{ id: 's', label: 'Sinter', method: 'TIER1_DEFAULT', sinterProducedTonnes: 1_200_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).not.toContain('double_counting_bfbof_tier1_includes_coke_sinter')
+  })
+})
+
+describe('QA #6 — EAF Tier 1 electrodes-only partial-coverage warning', () => {
+  it('warns when EAF Tier 1 is material and no supporting categories are filled', () => {
+    const p = baseIronSteelPayload()
+    p.facility.processRoute = 'EAF'
+    p.activityData.eaf = [{ id: 'e', label: 'EAF', method: 'TIER1_ELECTRODES_ONLY', crudeSteelProducedTonnes: 500_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.warnings)).toContain('eaf_tier1_electrodes_only_partial_coverage')
+  })
+
+  it('does NOT warn when supporting categories (stationary / DRI / lime) are present', () => {
+    const p = baseIronSteelPayload()
+    p.facility.processRoute = 'EAF'
+    p.activityData.eaf = [{ id: 'e', label: 'EAF', method: 'TIER1_ELECTRODES_ONLY', crudeSteelProducedTonnes: 500_000 }]
+    p.activityData.stationaryCombustion = [{ id: 'ng', label: 'Reheat NG', fuelCode: 'natural_gas', quantity: 1000, quantityUnit: 'Sm3' }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.warnings)).not.toContain('eaf_tier1_electrodes_only_partial_coverage')
+  })
+})
+
+describe('QA #5 — implausible-zero Scope 1 for non-trivial production', () => {
+  it('blocks when crude steel > 1000 t and zero activity entries (induction empty-shell)', () => {
+    const p = baseIronSteelPayload()
+    p.facility.processRoute = 'INDUCTION'
+    p.activityData.production = { crudeSteelTonnes: 100_000 }
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).toContain('implausible_zero_scope1_for_production')
+    expect(r.status).toBe('BLOCKED')
+  })
+
+  it('does NOT block when any activity row exists', () => {
+    const p = baseIronSteelPayload()
+    p.facility.processRoute = 'INDUCTION'
+    p.activityData.production = { crudeSteelTonnes: 100_000 }
+    p.activityData.fugitiveHFC = [{ id: 'h', label: 'Chiller', gasCode: 'r410a', method: 'MASS_BALANCE', inventoryStartKg: 100, purchasedKg: 5, soldKg: 0, inventoryEndKg: 100, recoveredForRecycleKg: 0 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).not.toContain('implausible_zero_scope1_for_production')
+  })
+})
+
+describe('QA #4 — process-gas allocation honesty warning', () => {
+  it('warns when allocation is non-default (engine emits at point of combustion regardless)', () => {
+    const p = baseIronSteelPayload()
+    p.methodSelections.processGasAllocation = 'CARBON_ALLOCATION_UPSTREAM'
+    const r = calculateIronSteel(p)
+    expect(codes(r.warnings)).toContain('process_gas_allocation_advisory_only')
+  })
+
+  it('does NOT warn for POINT_OF_EMISSION default', () => {
+    const p = baseIronSteelPayload()
+    const r = calculateIronSteel(p)
+    expect(codes(r.warnings)).not.toContain('process_gas_allocation_advisory_only')
+  })
+})
+
+describe('QA #1 — disclosure boundary basis required when reported is material', () => {
+  it('blocks when reported total is material and no boundaryBasis is set', () => {
+    const p = baseIronSteelPayload()
+    p.activityData.reported = [{ id: 'r', label: 'Tata-style aggregate', basis: 'REPORTED', co2eTonnes: 50_000_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).toContain('missing_disclosure_boundary_basis')
+  })
+
+  it('passes when boundaryBasis is set to a recognised value', () => {
+    const p = baseIronSteelPayload()
+    p.disclosure = { boundaryBasis: 'BRSR_BOUNDARY', boundaryNote: 'Indian operations per SEBI BRSR Section A.III.E' }
+    p.activityData.reported = [{ id: 'r', label: 'Tata aggregate', basis: 'REPORTED', co2eTonnes: 50_000_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).not.toContain('missing_disclosure_boundary_basis')
+  })
+
+  it('requires a note when boundaryBasis = OTHER', () => {
+    const p = baseIronSteelPayload()
+    p.disclosure = { boundaryBasis: 'OTHER' }
+    p.activityData.reported = [{ id: 'r', label: 'agg', basis: 'REPORTED', co2eTonnes: 50_000_000 }]
+    const r = calculateIronSteel(p)
+    expect(codes(r.errors)).toContain('boundary_basis_other_requires_note')
+  })
+})
+
+describe('QA #2 — reconciliation depth (per-gas + Scope 2 + intensity)', () => {
+  it('reconciles disclosed CO2 + CH4 + N2O independently', () => {
+    const p = baseIronSteelPayload()
+    p.activityData.bfBof = [{ id: 'b', label: 'BF/BOF', method: 'TIER1_INTEGRATED', crudeSteelProducedTonnes: 1_000_000 }]
+    p.activityData.disclosedScope1CO2Tonnes = 1_460_000     // matches modelled CO2
+    p.activityData.disclosedScope1CH4Tonnes = 100           // disclosed but model = 0 CH4
+    p.activityData.disclosedScope1N2OTonnes = 5
+    const r = calculateIronSteel(p)
+    const lines = r.reconciliation.lines
+    expect(lines.find((l) => l.metric === 'CO2')?.variancePercent).toBe(0)
+    expect(lines.find((l) => l.metric === 'CH4')).toBeDefined()
+    expect(codes(r.warnings)).toContain('reported_gas_split_missing')
+  })
+
+  it('reconciles disclosed Scope 2 and intensity per t crude steel', () => {
+    const p = baseIronSteelPayload()
+    p.activityData.production = { crudeSteelTonnes: 1_000_000 }
+    p.activityData.bfBof = [{ id: 'b', label: 'BF/BOF', method: 'TIER1_INTEGRATED', crudeSteelProducedTonnes: 1_000_000 }]
+    p.activityData.purchasedElectricity = { mwh: 100_000, gridEfTco2PerMwh: 0.716 }
+    p.activityData.disclosedScope2CO2eTonnes = 71_600
+    p.activityData.disclosedIntensityKgPerTcrudeSteel = 1460
+    const r = calculateIronSteel(p)
+    const lines = r.reconciliation.lines
+    expect(lines.find((l) => l.metric === 'SCOPE2')?.variancePercent).toBe(0)
+    expect(lines.find((l) => l.metric === 'INTENSITY')?.variancePercent).toBe(0)
+  })
+})

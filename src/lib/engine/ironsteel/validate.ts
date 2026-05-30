@@ -231,6 +231,85 @@ export function validateIronSteelInput(ctx: EngineContext, payload: IronSteelInp
     }
   }
 
+  /* ------------------------- ASSURANCE GATES ----------------------------- */
+
+  // (#3) Double-counting: BF/BOF Tier 1 integrated (1.46 tCO2/t CS) ALREADY
+  // includes upstream coke + sinter + BF + BOF combined per IPCC 2006 Vol 3
+  // Ch 4 Table 4.1. Adding separate coke/sinter entries on Tier 1 is a real
+  // bug — blocked.
+  const bfBofRowsTier1 = (activityData?.bfBof ?? []).filter((e) => e.method === 'TIER1_INTEGRATED' && (e.crudeSteelProducedTonnes ?? 0) > 0)
+  const cokeRows = (activityData?.cokeOven ?? []).filter((e) => (e.cokeProducedTonnes ?? e.cokeOutTonnes ?? 0) > 0)
+  const sinterRows = (activityData?.sinter ?? []).filter((e) => (e.sinterProducedTonnes ?? 0) > 0)
+  if (bfBofRowsTier1.length > 0 && (cokeRows.length > 0 || sinterRows.length > 0)) {
+    ctx.error(
+      'double_counting_bfbof_tier1_includes_coke_sinter',
+      'BF/BOF Tier 1 integrated default (1.46 tCO2/t crude steel) already includes upstream coke ovens, sinter plant, BF and BOF combined per IPCC 2006 Vol 3 Ch 4 Table 4.1. Adding separate Tier-1 coke / sinter entries on top double-counts. Either (a) switch BF/BOF to Tier 2 carbon balance and keep separate coke / sinter entries, or (b) remove the separate coke / sinter entries while keeping BF/BOF Tier 1 integrated.',
+      'activityData.bfBof',
+    )
+  }
+
+  // (#6) EAF partial coverage: Tier 1 electrodes-only (0.08 tCO2/t) covers
+  // ONLY electrode oxidation; it does NOT include charge carbon, DRI/HBI C,
+  // lime calcination, scrap-preheat NG, oxy-fuel burners. Public EAF
+  // benchmarks (worldsteel 0.3–0.5 incl. Scope 2) are higher.
+  const eafTier1Material = (activityData?.eaf ?? []).some((e) => e.method === 'TIER1_ELECTRODES_ONLY' && (e.crudeSteelProducedTonnes ?? 0) > 10_000)
+  const hasOtherEafCoverage = (activityData?.stationaryCombustion ?? []).length > 0 || (activityData?.limeKiln ?? []).length > 0 || (activityData?.dri ?? []).length > 0
+  if (eafTier1Material && !hasOtherEafCoverage) {
+    ctx.warn(
+      'eaf_tier1_electrodes_only_partial_coverage',
+      'EAF Tier 1 (0.08 tCO2/t) covers electrode oxidation only — IPCC 2006 Vol 3 Ch 4. It does NOT include charge carbon, DRI/HBI carbon oxidation, lime calcination, scrap-preheat NG, or oxy-fuel burner fuels. Public EAF Scope 1 benchmarks include these. Either switch to Tier 2 full balance OR add the supporting fuel / lime / DRI rows. Otherwise this row materially under-counts EAF Scope 1.',
+      'activityData.eaf',
+    )
+  }
+
+  // (#5) Implausible-zero check: any meaningful crude-steel production must
+  // produce some Scope 1 (auxiliary fuel, refrigerants, mobile, etc.). The
+  // post-calc backstop handles this but a pre-calc heuristic catches the
+  // "induction with nothing entered" pattern early.
+  const crudeSteel = activityData?.production?.crudeSteelTonnes ?? 0
+  if (typeof crudeSteel === 'number' && crudeSteel > 1_000) {
+    const anyEntry = ['stationaryCombustion', 'mobile', 'cokeOven', 'flaring', 'sinter', 'dri', 'bfBof', 'eaf', 'limeKiln', 'fugitiveHFC', 'fugitiveSF6', 'fugitiveOther', 'reported'].some((k) => ((activityData as unknown as Record<string, unknown[]>)[k] ?? []).length > 0)
+    if (!anyEntry) {
+      ctx.error(
+        'implausible_zero_scope1_for_production',
+        `Crude steel production is ${crudeSteel} t but NO activity entries have been provided. Every steelmaking route (including induction) has some Scope 1 (auxiliary fuel, refrigerants, mobile equipment). Add the applicable categories or provide a reported / disclosed figure with a boundary basis.`,
+        'activityData',
+      )
+    }
+  }
+
+  // (#4) Process-gas allocation honesty: the selector is captured in the audit
+  // trail but the engine currently emits at the point of combustion. Non-default
+  // selections need to be flagged so the verifier knows what was applied.
+  const allocation = payload.methodSelections?.processGasAllocation
+  if (allocation && allocation !== 'POINT_OF_EMISSION') {
+    ctx.warn(
+      'process_gas_allocation_advisory_only',
+      `Process-gas allocation = "${allocation}" — selection is recorded in the audit trail, but in the current engine version COG / BFG / BOFG combustion is always emitted at the point of combustion (POINT_OF_EMISSION). Upstream / energy-based CHP allocation is a methodology fork that will be wired in a follow-up. Disclose the chosen convention in the report narrative.`,
+      'methodSelections.processGasAllocation',
+    )
+  }
+
+  // (#1) Disclosure boundary basis: when reported entries are material
+  // (≥10% of disclosed gross, or any reported entry uses corporate-aggregate
+  // basis), the user MUST declare which boundary the figures describe.
+  const reportedTotal = (activityData?.reported ?? []).reduce<number>((a, e) => a + (e.co2eTonnes ?? ((e.co2Tonnes ?? 0) + (e.ch4Tonnes ?? 0) * 30 + (e.n2oTonnes ?? 0) * 273)), 0)
+  const hasMaterialReported = reportedTotal > 0 && (activityData?.disclosedGrossScope1CO2eTonnes == null || reportedTotal >= 0.1 * (activityData!.disclosedGrossScope1CO2eTonnes as number))
+  if (hasMaterialReported && !payload.disclosure?.boundaryBasis) {
+    ctx.error(
+      'missing_disclosure_boundary_basis',
+      'Reported / direct entries are material (≥10% of disclosed gross). The verifier needs to know WHICH boundary the disclosed totals describe — steelmaking sites only, all sites, WSA Scope 1+1a, BRSR, EU ETS, CBAM, corporate aggregate, or other. Set disclosure.boundaryBasis before submitting.',
+      'disclosure.boundaryBasis',
+    )
+  }
+  if (payload.disclosure?.boundaryBasis === 'OTHER' && !payload.disclosure?.boundaryNote?.trim()) {
+    ctx.error(
+      'boundary_basis_other_requires_note',
+      'disclosure.boundaryBasis = "OTHER" requires a note explaining what the boundary covers.',
+      'disclosure.boundaryNote',
+    )
+  }
+
   // Applicability vs data: warn when user disabled a category but supplied data
   const app = sourceApplicability
   if (app) {

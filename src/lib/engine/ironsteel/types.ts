@@ -341,9 +341,32 @@ export interface IronSteelActivityData {
   fugitiveSF6: Sf6Entry[]
   fugitiveOther: OtherFugitiveEntry[]
   reported: ReportedEntry[]
+  /** Disclosed gross Scope 1 figure for reconciliation (top-line). */
   disclosedGrossScope1CO2eTonnes?: Quantity
+  /** Per-gas disclosed figures — let users reconcile CO2 / CH4 / N2O independently
+   *  (common in BRSR Section A.III, ETS verified statements, worldsteel returns). */
+  disclosedScope1CO2Tonnes?: Quantity
+  disclosedScope1CH4Tonnes?: Quantity
+  disclosedScope1N2OTonnes?: Quantity
+  /** Disclosed Scope 2 (location-based) for supporting reconciliation. */
+  disclosedScope2CO2eTonnes?: Quantity
+  /** Disclosed intensity (kgCO2e per tonne crude steel) — many disclosures lead with this. */
+  disclosedIntensityKgPerTcrudeSteel?: Quantity
   purchasedElectricity: { mwh: Quantity; gridEfTco2PerMwh: Quantity }
 }
+
+/** Boundary basis the user is reporting under. Required when reported entries
+ *  contribute material share of gross. Captured in the audit trail so the
+ *  verifier sees exactly which scope the disclosed totals describe. */
+export type DisclosureBoundaryBasis =
+  | 'STEELMAKING_SITES_ONLY'   // worldsteel / ISO 14404 site-level basis
+  | 'ALL_SITES'                // corporate-aggregate including non-steelmaking sites
+  | 'WSA_SCOPE_1_PLUS_1A'      // worldsteel Scope 1 + Scope 1.1 (purchased intermediates)
+  | 'BRSR_BOUNDARY'            // India SEBI BRSR (Indian operations boundary)
+  | 'EU_ETS'                   // EU ETS Annex I installation boundary
+  | 'CBAM'                     // CBAM Annex II direct embedded emissions
+  | 'CORPORATE_AGGREGATE'      // catch-all corporate reporting boundary
+  | 'OTHER'                    // explain in note
 
 export interface IronSteelInputPayload {
   calculationContext: {
@@ -364,6 +387,14 @@ export interface IronSteelInputPayload {
   methodSelections: IronSteelMethodSelections
   sourceApplicability: IronSteelSourceApplicability
   activityData: IronSteelActivityData
+  /** Inventory-level disclosure metadata. Required when reported entries
+   *  contribute material share of gross — captured in the audit trail. */
+  disclosure?: {
+    boundaryBasis?: DisclosureBoundaryBasis
+    boundaryNote?: string
+    publicReportUrl?: string
+    publicReportPageReference?: string
+  }
   factorOverrides: Record<string, { value: number; source?: string; reason?: string }>
 }
 

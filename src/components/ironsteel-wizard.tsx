@@ -38,6 +38,7 @@ import { calculateIronSteel } from '@/lib/engine/ironsteel'
 import type {
   BfBofEntry,
   CokeOvenEntry,
+  DisclosureBoundaryBasis,
   DriEntry,
   EafEntry,
   FlaringEntry,
@@ -1195,6 +1196,11 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                     <option value="CARBON_ALLOCATION_UPSTREAM">Carbon allocation upstream (ISO 14404, worldsteel)</option>
                     <option value="ENERGY_BASED_CHP">Energy-based CHP allocation</option>
                   </select>
+                  {ms.processGasAllocation !== 'POINT_OF_EMISSION' && (
+                    <small className="form-sub" style={{ marginTop: 6, color: '#c2410c' }}>
+                      Methodology fork: this selection is captured in the audit trail but the engine still allocates emissions at the point of combustion (GHG Protocol default). A formal alternative-allocation rerun is on the roadmap — verifier sign-off would need a side calculation.
+                    </small>
+                  )}
                 </label>
               </div>
             </div>
@@ -1270,9 +1276,72 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                   <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
                   <div className="form-card">
                     <h2>Reconciliation against a disclosed total</h2>
-                    <p className="form-sub">Optional. If you have a published gross Scope 1 figure (annual report, ETS verified statement), enter it here — we flag variance &gt;5%.</p>
+                    <p className="form-sub">For audit defensibility, enter (a) what boundary the public number describes, (b) the gross Scope 1 figure and — where available — its per-gas split, supporting Scope 2, and intensity. We reconcile each line independently and flag variance &gt;5%.</p>
+
+                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Boundary &amp; provenance</h3>
                     <div className="field-row">
-                      <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="from public disclosure / ETS report" />
+                      <label className="field">Boundary basis
+                        <select
+                          value={p.disclosure?.boundaryBasis ?? ''}
+                          onChange={(ev) => {
+                            const v = ev.target.value as DisclosureBoundaryBasis | ''
+                            patch((d) => {
+                              d.disclosure = { ...(d.disclosure ?? {}), boundaryBasis: v === '' ? undefined : v }
+                            })
+                          }}
+                        >
+                          <option value="">— select —</option>
+                          <option value="STEELMAKING_SITES_ONLY">Steelmaking sites only (worldsteel / ISO 14404)</option>
+                          <option value="ALL_SITES">All sites (corporate aggregate inc. non-steelmaking)</option>
+                          <option value="WSA_SCOPE_1_PLUS_1A">worldsteel Scope 1 + 1A (purchased intermediates)</option>
+                          <option value="BRSR_BOUNDARY">BRSR boundary (India SEBI)</option>
+                          <option value="EU_ETS">EU ETS (Annex I installation)</option>
+                          <option value="CBAM">CBAM (Annex II direct embedded)</option>
+                          <option value="CORPORATE_AGGREGATE">Corporate aggregate (catch-all)</option>
+                          <option value="OTHER">Other — explain in note</option>
+                        </select>
+                        <small className="form-sub" style={{ marginTop: 4 }}>Required when reported entries are material (≥10% of gross). Picks the lens the disclosed numbers were measured under.</small>
+                      </label>
+                      <label className="field">Public report URL
+                        <input
+                          value={p.disclosure?.publicReportUrl ?? ''}
+                          placeholder="https://… (annual report, BRSR, ETS verified statement)"
+                          onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportUrl: ev.target.value } })}
+                        />
+                      </label>
+                      <label className="field">Page / section reference
+                        <input
+                          value={p.disclosure?.publicReportPageReference ?? ''}
+                          placeholder="e.g. BRSR Section A.III.E, p. 142"
+                          onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportPageReference: ev.target.value } })}
+                        />
+                      </label>
+                    </div>
+                    {p.disclosure?.boundaryBasis === 'OTHER' && (
+                      <div className="field-row">
+                        <label className="field" style={{ gridColumn: 'span 3' }}>Boundary note (required when basis = Other)
+                          <input
+                            value={p.disclosure?.boundaryNote ?? ''}
+                            placeholder="e.g. group-level boundary minus joint ventures; mining excluded; downstream rolling included"
+                            onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), boundaryNote: ev.target.value } })}
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Disclosed gross figures</h3>
+                    <div className="field-row">
+                      <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="top-line gross from disclosure" />
+                      <NumField label="Disclosed Scope 2" unit="tCO2e" value={ad.disclosedScope2CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope2CO2eTonnes = v))} hint="location-based, for supporting recon" />
+                      <NumField label="Disclosed intensity" unit="kgCO2e / t crude steel" value={ad.disclosedIntensityKgPerTcrudeSteel ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedIntensityKgPerTcrudeSteel = v))} hint="the canonical steel KPI — often the headline" />
+                    </div>
+
+                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>By-gas split (optional)</h3>
+                    <p className="form-sub">If the disclosure breaks gross into CO2 / CH4 / N2O masses (common in BRSR Section A.III, ETS verified statements, worldsteel returns), enter them — each gas reconciles independently.</p>
+                    <div className="field-row">
+                      <NumField label="Disclosed CO2" unit="tCO2" value={ad.disclosedScope1CO2Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CO2Tonnes = v))} />
+                      <NumField label="Disclosed CH4" unit="t CH4 (mass)" value={ad.disclosedScope1CH4Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CH4Tonnes = v))} hint="enter mass, not CO2e" />
+                      <NumField label="Disclosed N2O" unit="t N2O (mass)" value={ad.disclosedScope1N2OTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1N2OTonnes = v))} hint="enter mass, not CO2e" />
                     </div>
                   </div>
                 </>
@@ -1341,12 +1410,32 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
 
             {result.reconciliation.checked && (
               <div className="form-card">
-                <h2>Reconciliation vs disclosed total</h2>
+                <h2>Reconciliation vs disclosed figures</h2>
                 <p className="form-sub">{result.reconciliation.note}</p>
-                <div className="summary-cats">
-                  <div className="summary-card"><span>Disclosed</span><strong>{fmt.format(result.reconciliation.disclosedGrossCO2eTonnes ?? 0)}</strong><small>tCO2e</small></div>
-                  <div className="summary-card"><span>Modelled</span><strong>{fmt.format(result.reconciliation.modelledGrossCO2eTonnes)}</strong><small>tCO2e</small></div>
-                  <div className="summary-card"><span>Variance</span><strong>{fmt.format(result.reconciliation.variancePercent ?? 0)}%</strong><small>{Math.abs(result.reconciliation.variancePercent ?? 0) > 5 ? 'exceeds ±5% — review' : 'within ±5%'}</small></div>
+                {p.disclosure?.boundaryBasis && (
+                  <p className="form-sub" style={{ marginTop: 0 }}>
+                    <b>Boundary basis:</b> {p.disclosure.boundaryBasis.replace(/_/g, ' ').toLowerCase()}
+                    {p.disclosure.publicReportPageReference ? <> · {p.disclosure.publicReportPageReference}</> : null}
+                    {p.disclosure.publicReportUrl ? <> · <a href={p.disclosure.publicReportUrl} target="_blank" rel="noopener noreferrer">source</a></> : null}
+                  </p>
+                )}
+                <div className="result-table">
+                  <div className="result-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', fontWeight: 800, color: 'var(--ink-mute)' }}>
+                    <span>Metric</span>
+                    <span style={{ textAlign: 'right' }}>Disclosed</span>
+                    <span style={{ textAlign: 'right' }}>Modelled</span>
+                    <span style={{ textAlign: 'right' }}>Variance</span>
+                    <span style={{ textAlign: 'right' }}>Status</span>
+                  </div>
+                  {result.reconciliation.lines.map((line) => (
+                    <div key={line.metric} className="result-row" style={{ gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr' }}>
+                      <strong>{line.label}</strong>
+                      <span style={{ textAlign: 'right' }}>{fmt.format(line.disclosed ?? 0)} <small style={{ color: 'var(--muted)' }}>{line.unit}</small></span>
+                      <span style={{ textAlign: 'right' }}>{fmt.format(line.modelled)} <small style={{ color: 'var(--muted)' }}>{line.unit}</small></span>
+                      <span style={{ textAlign: 'right', color: line.withinThreshold ? 'inherit' : '#c2410c', fontWeight: 700 }}>{fmt.format(line.variancePercent ?? 0)}%</span>
+                      <span style={{ textAlign: 'right', color: line.withinThreshold ? 'var(--ink-mute)' : '#c2410c' }}>{line.withinThreshold ? 'within ±5%' : 'review'}</span>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

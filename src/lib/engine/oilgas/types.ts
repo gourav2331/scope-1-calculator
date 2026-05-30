@@ -339,7 +339,7 @@ export type OilGasCategory =
 
 /** One disclosed-vs-modelled comparison (a gas, the gross total, or Scope 2). */
 export interface ReconciliationLine {
-  metric: 'GROSS_CO2E' | 'CO2' | 'CH4' | 'N2O' | 'SCOPE2'
+  metric: 'GROSS_CO2E' | 'CO2' | 'CH4' | 'N2O' | 'SCOPE2' | 'INTENSITY'
   label: string
   unit: string
   disclosed: number | null

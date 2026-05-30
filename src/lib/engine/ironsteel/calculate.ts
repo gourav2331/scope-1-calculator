@@ -176,6 +176,11 @@ export function calculateIronSteel(
   }
 
   // --- disclosed-vs-modelled reconciliation ---------------------------------
+  // Reconcile each disclosed figure independently — gross can match while the
+  // gas mix is wrong, or the corporate aggregate could include sites that the
+  // engine model excludes. By-gas + Scope 2 + intensity reconciliation is the
+  // standard public-disclosure cross-check (BRSR, ETS verified statements,
+  // worldsteel returns all break down to these dimensions).
   const RECON_THRESHOLD = 5
   const lines: ReconciliationLine[] = []
   const addReconLine = (metric: ReconciliationLine['metric'], label: string, unit: string, disclosedVal: number | null | undefined, modelledVal: number) => {
@@ -191,6 +196,31 @@ export function calculateIronSteel(
     })
   }
   addReconLine('GROSS_CO2E', 'Gross Scope 1', 'tCO2e', activity.disclosedGrossScope1CO2eTonnes, grossScope1)
+  addReconLine('CO2', 'CO2 (gross)', 'tCO2', activity.disclosedScope1CO2Tonnes, byGas.co2Tonnes)
+  addReconLine('CH4', 'CH4 (gross, mass)', 'tCH4', activity.disclosedScope1CH4Tonnes, byGas.ch4Tonnes)
+  addReconLine('N2O', 'N2O (gross, mass)', 'tN2O', activity.disclosedScope1N2OTonnes, byGas.n2oTonnes)
+  addReconLine('SCOPE2', 'Supporting Scope 2', 'tCO2e', activity.disclosedScope2CO2eTonnes, electricityScoped)
+  // Intensity reconciliation — kg CO2e per tonne crude steel (canonical steel KPI)
+  const csForIntensity = isPresent(prod.crudeSteelTonnes) && (prod.crudeSteelTonnes as number) > 0 ? (prod.crudeSteelTonnes as number) * shareFactor : 0
+  if (csForIntensity > 0 && isPresent(activity.disclosedIntensityKgPerTcrudeSteel) && (activity.disclosedIntensityKgPerTcrudeSteel as number) > 0) {
+    const modelledIntensity = (grossScope1 * 1000) / csForIntensity
+    addReconLine('INTENSITY', 'Intensity per t crude steel', 'kgCO2e/t', activity.disclosedIntensityKgPerTcrudeSteel, modelledIntensity)
+  }
+
+  // Nudge: a disclosed by-gas figure was supplied but the model carries no
+  // mass for that gas — typical of a gross-only reported entry. Steer to
+  // by-gas reported entry to enable each-gas reconciliation.
+  const gasSplitMissing = lines.some(
+    (l) => (l.metric === 'CO2' || l.metric === 'CH4' || l.metric === 'N2O') && l.modelled === 0 && (l.disclosed ?? 0) > 0,
+  )
+  if (gasSplitMissing) {
+    ctx.warn(
+      'reported_gas_split_missing',
+      'A disclosed by-gas figure (CO2 / CH4 / N2O) was provided but the modelled inventory has no mass for that gas — likely because the total was entered as a single gross CO2e. Enter the reported figure by gas instead to enable per-gas reconciliation.',
+      'activityData.reported',
+    )
+  }
+
   const exceedingLines = lines.filter((l) => !l.withinThreshold)
   if (exceedingLines.length > 0) {
     ctx.warn(
