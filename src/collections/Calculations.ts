@@ -32,10 +32,12 @@ export const Calculations: CollectionConfig = {
      * maker-checker with separate roles is a follow-up.
      */
     {
+      // NB: not `required: true` so existing cms.create() calls in the
+      // sector-specific calculate routes don't break — the defaultValue
+      // already guarantees the column is populated on insert.
       name: 'workflowStatus',
       type: 'select',
       defaultValue: 'draft',
-      required: true,
       options: ['draft', 'submitted', 'under_review', 'locked', 'verified'],
     },
     { name: 'lockedAt', type: 'date' },

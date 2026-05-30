@@ -31,6 +31,7 @@ export async function POST(req: Request) {
       const cms = await getPayload({ config })
       const saved = await cms.create({
         collection: 'calculations',
+        draft: false,
         data: {
           name: `${payload.organization?.name ?? 'Org'} — ${payload.facility?.name ?? 'Facility'} — FY ${payload.calculationContext?.reportingPeriod?.year}`,
           reportingYear: payload.calculationContext?.reportingPeriod?.year ?? new Date().getFullYear(),
@@ -41,6 +42,7 @@ export async function POST(req: Request) {
                 ? 'success_with_warnings'
                 : 'calculated',
           sectorCode: 'CEMENT',
+          workflowStatus: 'draft',
           gwpSet: payload.calculationContext?.gwpSet ?? 'AR6',
           grossScope1Tonnes: result.scope1.grossScope1CO2Tonnes,
           biomassMemoTonnes: result.memoItems.biomassCO2Tonnes,
