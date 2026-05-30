@@ -1,0 +1,66 @@
+import type { IronSteelInputPayload } from '../types'
+
+/** Complete, valid baseline I&S payload with no sources (totals to zero). */
+export function baseIronSteelPayload(): IronSteelInputPayload {
+  return {
+    calculationContext: {
+      calculationType: 'ANNUAL_INVENTORY',
+      reportingPeriod: { year: 2026, startDate: '2026-01-01', endDate: '2026-12-31' },
+      inventoryVersion: 'TEST_V1',
+      gwpSet: 'AR6_100',
+    },
+    organization: { name: 'Test Steel Ltd', country: 'IN' },
+    facility: { name: 'Plant 1', processRoute: 'BF_BOF' },
+    organizationBoundary: {
+      boundaryMethod: 'OPERATIONAL_CONTROL',
+      ownershipSharePercent: 100,
+      consolidationPercent: 100,
+    },
+    sector: { sectorCode: 'IRON_STEEL' },
+    methodSelections: {
+      stationaryMethod: 'ENERGY_BASED',
+      mobileMethod: 'FUEL_BASED',
+      sinterMethod: 'TIER1_DEFAULT',
+      cokeMethod: 'TIER1_DEFAULT',
+      bfBofMethod: 'TIER1_INTEGRATED',
+      eafMethod: 'TIER1_ELECTRODES_ONLY',
+      driMethod: 'TIER1_DEFAULT',
+      electricityMethod: 'LOCATION_BASED_SUPPORTING',
+      processGasAllocation: 'POINT_OF_EMISSION',
+    },
+    sourceApplicability: {
+      stationaryCombustion: true,
+      mobile: true,
+      cokeOven: true,
+      flaring: true,
+      sinter: true,
+      dri: true,
+      bfBof: true,
+      eaf: true,
+      limeKiln: true,
+      fugitiveHFC: true,
+      fugitiveSF6: true,
+      fugitiveOther: true,
+      reported: true,
+      purchasedElectricity: true,
+    },
+    activityData: {
+      production: {},
+      stationaryCombustion: [],
+      mobile: [],
+      cokeOven: [],
+      flaring: [],
+      sinter: [],
+      dri: [],
+      bfBof: [],
+      eaf: [],
+      limeKiln: [],
+      fugitiveHFC: [],
+      fugitiveSF6: [],
+      fugitiveOther: [],
+      reported: [],
+      purchasedElectricity: { mwh: null, gridEfTco2PerMwh: null },
+    },
+    factorOverrides: {},
+  }
+}
