@@ -30,4 +30,4 @@ export type { IronSteelGwpSet } from './constants'
 export { resolveGwp, ch4ToCO2e, n2oToCO2e, sf6ToCO2e } from './gwp'
 export { emptyGas, addGas, scaleGas, roundGas } from './helpers'
 export * from './types'
-// calculateIronSteel will be wired once the orchestrator exists.
+export { calculateIronSteel } from './calculate'
