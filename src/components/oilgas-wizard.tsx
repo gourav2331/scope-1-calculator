@@ -993,7 +993,7 @@ function IntensityCard({ label, metric, value, unit, percent }: { label: string;
 
 /* --------------------------------- wizard -------------------------------- */
 
-export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper') => void }) {
+export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel') => void }) {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [step, setStep] = useState(1)
   const [cat, setCat] = useState<OgCat>('stationary')
@@ -1296,7 +1296,13 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                 <small>Kraft · recycled · paper · integrated</small>
                 <span className="tags">ICFPA / NCASI · active</span>
               </button>
-              {['Iron & Steel', 'Power', 'Chemicals', 'Textile', 'Pharma', 'General Mfg'].map((x) => (
+              <button className="sector-card" onClick={() => onSwitchSector?.('iron_steel')}>
+                <span className="icon"><Hexagon size={22} strokeWidth={1.75} /></span>
+                <strong>Iron &amp; Steel</strong>
+                <small>BF-BOF · EAF · DRI-EAF</small>
+                <span className="tags">worldsteel / ISO 14404 · active</span>
+              </button>
+              {['Power', 'Chemicals', 'Textile', 'Pharma', 'General Mfg'].map((x) => (
                 <button className="sector-card muted" key={x} disabled>
                   <span className="icon"><Hexagon size={22} strokeWidth={1.75} /></span>
                   <strong>{x}</strong>

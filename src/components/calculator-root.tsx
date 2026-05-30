@@ -2,11 +2,12 @@
 
 import { useState } from 'react'
 
+import { IronSteelWizard } from '@/components/ironsteel-wizard'
 import { OilGasWizard } from '@/components/oilgas-wizard'
 import { PulpPaperWizard } from '@/components/pulppaper-wizard'
 import { Scope1Wizard } from '@/components/scope1-wizard'
 
-export type Sector = 'cement' | 'oil_gas' | 'pulp_paper'
+export type Sector = 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel'
 
 /**
  * Top-level shell that picks which sector wizard to render. Each wizard's
@@ -17,5 +18,6 @@ export function CalculatorRoot() {
   const [sector, setSector] = useState<Sector>('cement')
   if (sector === 'oil_gas') return <OilGasWizard onSwitchSector={setSector} />
   if (sector === 'pulp_paper') return <PulpPaperWizard onSwitchSector={setSector} />
+  if (sector === 'iron_steel') return <IronSteelWizard onSwitchSector={setSector} />
   return <Scope1Wizard onSwitchSector={setSector} />
 }
