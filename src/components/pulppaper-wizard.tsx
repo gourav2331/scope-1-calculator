@@ -12,6 +12,7 @@
 
 import {
   AlertCircle,
+  Atom,
   Boxes,
   CheckCircle2,
   Droplets,
@@ -89,19 +90,39 @@ type Cat =
   | 'transfer'
   | 'reported'
 
-const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; appKey?: keyof PulpPaperInputPayload['sourceApplicability'] }[] = [
-  { key: 'production', label: 'Production', icon: Boxes }, // always shown (intensity denominators)
-  { key: 'stationary', label: 'Stationary', icon: Flame, appKey: 'stationaryCombustion' },
-  { key: 'biomass', label: 'Biomass', icon: TreePine, appKey: 'biomassCombustion' },
-  { key: 'limeKiln', label: 'Lime kilns', icon: Factory, appKey: 'limeKilns' },
-  { key: 'makeup', label: 'Make-up carbonates', icon: Hexagon, appKey: 'makeupCarbonates' },
-  { key: 'mobile', label: 'Mobile', icon: Truck, appKey: 'mobile' },
-  { key: 'landfill', label: 'Landfills', icon: Recycle, appKey: 'landfills' },
-  { key: 'wwt', label: 'Anaerobic WWT', icon: Droplets, appKey: 'anaerobicWwt' },
-  { key: 'refrigerant', label: 'Refrigerants', icon: Snowflake, appKey: 'refrigerants' },
-  { key: 'chp', label: 'CHP allocation', icon: Zap, appKey: 'chpAllocation' },
-  { key: 'transfer', label: 'CO2 transfers', icon: Wind, appKey: 'co2Transfers' },
-  { key: 'reported', label: 'Reported', icon: FileText, appKey: 'reported' },
+/** Canonical Scope 1 source-type taxonomy for P&P (GHG Protocol §4.1 + ICFPA/NCASI guidance).
+ *  Biomass combustion produces both fossil-bracket CH4/N2O (Scope 1) and biogenic CO2 (memo)
+ *  — it belongs in STATIONARY for source-type purposes. */
+type PPGroup = 'PRODUCTION' | 'STATIONARY' | 'MOBILE' | 'PROCESS' | 'FUGITIVE' | 'ALLOCATION' | 'REPORTED'
+
+type PPIconCmp = React.ComponentType<{ size?: number; strokeWidth?: number }>
+
+const PP_GROUP_LABELS: Record<PPGroup, { label: string; hint: string; icon: PPIconCmp }> = {
+  PRODUCTION: { label: 'Production', hint: 'intensity denominators (not a Scope 1 source)', icon: Boxes },
+  STATIONARY: { label: 'Stationary combustion', hint: 'fossil + biomass · boilers · dryers · RTOs · turbines', icon: Flame },
+  MOBILE:     { label: 'Mobile combustion', hint: 'forklifts · yard trucks · forestry equipment', icon: Truck },
+  PROCESS:    { label: 'Process emissions', hint: 'lime kiln calcination + make-up carbonates', icon: Atom },
+  FUGITIVE:   { label: 'Fugitive emissions', hint: 'landfill CH4 · anaerobic WWT · refrigerants', icon: Wind },
+  ALLOCATION: { label: 'CHP allocation + CO2 transfers', hint: 'analytical only — does not change gross', icon: Zap },
+  REPORTED:   { label: 'Reported / direct-entry', hint: 'aggregate disclosure + reconciliation', icon: FileText },
+}
+
+const PP_PRIMARY_GROUPS: PPGroup[] = ['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE']
+const PP_GROUP_ORDER: PPGroup[] = ['PRODUCTION', 'STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE', 'ALLOCATION', 'REPORTED']
+
+const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; appKey?: keyof PulpPaperInputPayload['sourceApplicability']; group: PPGroup }[] = [
+  { key: 'production', label: 'Production', icon: Boxes, group: 'PRODUCTION' }, // always shown (intensity denominators)
+  { key: 'stationary', label: 'Stationary', icon: Flame, appKey: 'stationaryCombustion', group: 'STATIONARY' },
+  { key: 'biomass', label: 'Biomass', icon: TreePine, appKey: 'biomassCombustion', group: 'STATIONARY' },
+  { key: 'mobile', label: 'Mobile', icon: Truck, appKey: 'mobile', group: 'MOBILE' },
+  { key: 'limeKiln', label: 'Lime kilns', icon: Factory, appKey: 'limeKilns', group: 'PROCESS' },
+  { key: 'makeup', label: 'Make-up carbonates', icon: Hexagon, appKey: 'makeupCarbonates', group: 'PROCESS' },
+  { key: 'landfill', label: 'Landfills', icon: Recycle, appKey: 'landfills', group: 'FUGITIVE' },
+  { key: 'wwt', label: 'Anaerobic WWT', icon: Droplets, appKey: 'anaerobicWwt', group: 'FUGITIVE' },
+  { key: 'refrigerant', label: 'Refrigerants', icon: Snowflake, appKey: 'refrigerants', group: 'FUGITIVE' },
+  { key: 'chp', label: 'CHP allocation', icon: Zap, appKey: 'chpAllocation', group: 'ALLOCATION' },
+  { key: 'transfer', label: 'CO2 transfers', icon: Wind, appKey: 'co2Transfers', group: 'ALLOCATION' },
+  { key: 'reported', label: 'Reported', icon: FileText, appKey: 'reported', group: 'REPORTED' },
 ]
 
 /**
@@ -120,7 +141,8 @@ const MILL_APPLICABILITY_DEFAULTS: Record<PulpPaperInputPayload['facility']['mil
   MIXED:       { stationaryCombustion: true,  biomassCombustion: true,  limeKilns: true,  makeupCarbonates: true,  mobile: true, landfills: true,  anaerobicWwt: true,  refrigerants: true, chpAllocation: true, co2Transfers: true, reported: true, purchasedElectricity: true },
 }
 
-const APPLICABILITY_LABELS: Record<keyof PulpPaperInputPayload['sourceApplicability'], string> = {
+type PPAppKey = keyof PulpPaperInputPayload['sourceApplicability']
+const APPLICABILITY_LABELS: Record<PPAppKey, string> = {
   stationaryCombustion: 'Stationary combustion (boilers, IR dryers, RTOs, turbines)',
   biomassCombustion: 'Biomass combustion (bark, hog fuel, black liquor, biogas, NCG)',
   limeKilns: 'Kraft mill lime kilns / calciners',
@@ -133,6 +155,33 @@ const APPLICABILITY_LABELS: Record<keyof PulpPaperInputPayload['sourceApplicabil
   co2Transfers: 'Fossil CO2 exports / imports (PCC plant etc.)',
   reported: 'Reported / direct-entry (corporate aggregate disclosure)',
   purchasedElectricity: 'Purchased electricity (supporting Scope 2)',
+}
+
+/** Maps each applicability checkbox to its Scope 1 source-type bucket. */
+const PP_APPLICABILITY_GROUPS: Record<PPAppKey, PPGroup | 'SUPPORTING'> = {
+  stationaryCombustion: 'STATIONARY',
+  biomassCombustion:    'STATIONARY',
+  mobile:               'MOBILE',
+  limeKilns:            'PROCESS',
+  makeupCarbonates:     'PROCESS',
+  landfills:            'FUGITIVE',
+  anaerobicWwt:         'FUGITIVE',
+  refrigerants:         'FUGITIVE',
+  chpAllocation:        'ALLOCATION',
+  co2Transfers:         'ALLOCATION',
+  reported:             'REPORTED',
+  purchasedElectricity: 'SUPPORTING',
+}
+
+const PP_APPLICABILITY_GROUP_HEADS: Record<PPGroup | 'SUPPORTING', string> = {
+  PRODUCTION: 'Production volumes',
+  STATIONARY: 'Stationary combustion — fossil + biomass (biogenic CO2 = memo, CH4/N2O = Scope 1)',
+  MOBILE:     'Mobile combustion — on-site fleet / equipment',
+  PROCESS:    'Process emissions — calcination of make-up carbonates + kiln raw inputs',
+  FUGITIVE:   'Fugitive emissions — landfill CH4, anaerobic WWT, refrigerants',
+  ALLOCATION: 'Allocation / CO2 transfers (analytical, not gross)',
+  REPORTED:   'Reported / direct-entry',
+  SUPPORTING: 'Supporting (Scope 2)',
 }
 
 /* ----------------------------- empty payload ----------------------------- */
@@ -828,7 +877,7 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel') => void }) {
   const [p, setP] = useState<PulpPaperInputPayload>(emptyPulpPaperPayload)
   const [step, setStep] = useState<number>(1)
-  const [cat, setCat] = useState<Cat>('production')
+  const [cat, setCat] = useState<Cat>('stationary')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<PulpPaperCalculationResult | null>(null)
   const [live, setLive] = useState<PulpPaperCalculationResult | null>(null)
@@ -1085,7 +1134,7 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
         {step === 1 && (
           <section className="step-page active">
             <h1 className="step-title">What <em>sector</em> are you in?</h1>
-            <p className="step-sub">Pulp &amp; Paper uses the ICFPA/NCASI v1.4 ten-category taxonomy. Gross Scope 1 is full CO2e; biogenic CO2 is a separate memo line.</p>
+            <p className="step-sub">Pulp &amp; Paper uses the ICFPA/NCASI v1.4 ten-category taxonomy. Gross Scope 1 covers all four canonical source types — <b>stationary combustion</b> (fossil + biomass), <b>mobile combustion</b>, <b>process emissions</b> (lime kiln + make-up carbonates), and <b>fugitive emissions</b> (landfill CH4, anaerobic WWT, refrigerants) — as full CO2e. Biogenic CO2 is a separate memo line.</p>
             {hasDraft && (
               <div style={{ alignItems: 'center', background: 'color-mix(in srgb, #2f6b4f 10%, transparent)', border: '1px solid color-mix(in srgb, #2f6b4f 32%, transparent)', borderRadius: 12, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', margin: '14px 0 0', padding: '12px 16px' }}>
                 <div><b>Draft restored.</b> <span style={{ color: 'var(--muted)' }}>Your previous entry was autosaved and reloaded.</span></div>
@@ -1273,51 +1322,98 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
           </section>
         )}
 
-        {step === 4 && (
+        {step === 4 && (() => {
+          const activeGroupOfCat = (CATEGORIES.find((c) => c.key === cat)?.group ?? 'STATIONARY') as PPGroup
+          const activeGroup: PPGroup = PP_PRIMARY_GROUPS.includes(activeGroupOfCat) ? activeGroupOfCat : 'STATIONARY'
+          const subCats = CATEGORIES.filter((c) => c.group === activeGroup && (!c.appKey || p.sourceApplicability[c.appKey] !== false))
+          if (subCats.length > 0 && !subCats.some((c) => c.key === cat)) {
+            setTimeout(() => setCat(subCats[0].key), 0)
+          }
+          const allocCats = CATEGORIES.filter((c) => c.group === 'ALLOCATION' && (!c.appKey || p.sourceApplicability[c.appKey] !== false))
+          return (
           <section className="step-page active">
             <h1 className="step-title">Activity <em>data</em></h1>
-            <p className="step-sub">The ten ICFPA categories plus reported. Leave a field blank for <b>missing</b>; type <b>0</b> only for a confirmed zero. <em>Biogenic CO2 is never in gross Scope 1.</em></p>
+            <p className="step-sub">Pick a Scope 1 source type below — <b>stationary combustion</b> (fossil + biomass), <b>mobile combustion</b>, <b>process emissions</b> (lime kiln + make-up carbonates), or <b>fugitive emissions</b> (landfill CH4, anaerobic WWT, refrigerants) — then drill into its sub-category. <b>Production</b> (top) drives intensity. <b>CHP allocation / CO2 transfers</b> and <b>Reported</b> (bottom) are analytical / disclosure modes. <em>Biogenic CO2 is never in gross Scope 1.</em></p>
             <LiveTotals live={live} />
 
-            <div className="form-card">
-              <h2>Source applicability — what this mill actually operates</h2>
-              <p className="form-sub">
-                Auto-set from your <b>{p.facility.millType.toLowerCase().replace('_', ' ')}</b> mill type per the ICFPA decision tree. Toggle OFF any source this mill doesn&apos;t have to hide its tab. Source applicability is part of the audit trail.
+            <details className="form-card">
+              <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>Source applicability — what this mill operates ({Object.values(p.sourceApplicability).filter(Boolean).length} of {Object.keys(p.sourceApplicability).length} sources active)</summary>
+              <p className="form-sub" style={{ marginTop: 8 }}>
+                Auto-set from your <b>{p.facility.millType.toLowerCase().replace('_', ' ')}</b> mill type per the ICFPA decision tree. Toggle OFF any source this mill doesn&apos;t have to hide its sub-tab.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px 16px', marginTop: 10 }}>
-                {(Object.entries(APPLICABILITY_LABELS) as [keyof PulpPaperInputPayload['sourceApplicability'], string][]).map(([k, label]) => (
-                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
-                    <input
-                      type="checkbox"
-                      checked={!!p.sourceApplicability[k]}
-                      onChange={(e) => patch((d) => (d.sourceApplicability[k] = e.target.checked))}
-                      style={{ width: 16, height: 16, accentColor: 'var(--purple)' }}
-                    />
-                    <span style={{ color: p.sourceApplicability[k] ? 'var(--ink)' : 'var(--ink-mute)' }}>{label}</span>
-                  </label>
-                ))}
+              {(['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE', 'ALLOCATION', 'REPORTED', 'SUPPORTING'] as const).map((group) => {
+                const keys = (Object.keys(APPLICABILITY_LABELS) as PPAppKey[]).filter((k) => PP_APPLICABILITY_GROUPS[k] === group)
+                if (keys.length === 0) return null
+                return (
+                  <div key={group} className="applicability-group">
+                    <div className="applicability-group-head">{PP_APPLICABILITY_GROUP_HEADS[group]}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px 16px' }}>
+                      {keys.map((k) => (
+                        <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!p.sourceApplicability[k]}
+                            onChange={(e) => patch((d) => (d.sourceApplicability[k] = e.target.checked))}
+                            style={{ width: 16, height: 16, accentColor: 'var(--purple)' }}
+                          />
+                          <span style={{ color: p.sourceApplicability[k] ? 'var(--ink)' : 'var(--ink-mute)' }}>{APPLICABILITY_LABELS[k]}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </details>
+
+            <div className="form-card">
+              <h2>Production volumes</h2>
+              <p className="form-sub">Reporting-period volumes drive intensity metrics (kgCO2e/ADt pulp, t paper, t board). Not a Scope 1 source — these are the denominators.</p>
+              <div className="field-row">
+                <NumField label="Air-dry pulp (ADt)" unit="t" value={ad.production.airDryPulpTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.airDryPulpTonnes = v))} />
+                <NumField label="Paper produced" unit="t" value={ad.production.paperProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.paperProducedTonnes = v))} />
+                <NumField label="Board produced" unit="t" value={ad.production.boardProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.boardProducedTonnes = v))} />
               </div>
             </div>
 
-            <div className="category-tabs">
-              {CATEGORIES.filter(c => !c.appKey || p.sourceApplicability[c.appKey] !== false).map(({ key, label, icon: Icon }) => (
-                <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
-                  <Icon size={15} /> {label} <span>{counts[key]}</span>
-                </button>
-              ))}
+            <div className="primary-tabs">
+              {PP_PRIMARY_GROUPS.map((g) => {
+                const inGroup = CATEGORIES.filter((c) => c.group === g && (!c.appKey || p.sourceApplicability[c.appKey] !== false))
+                const total = inGroup.reduce((sum, c) => sum + (counts[c.key] || 0), 0)
+                const meta = PP_GROUP_LABELS[g]
+                const Icon = meta.icon
+                const isActive = activeGroup === g
+                const disabled = inGroup.length === 0
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    className={`primary-tab ${isActive ? 'active' : ''}`}
+                    disabled={disabled}
+                    style={disabled ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                    onClick={() => { if (inGroup[0]) setCat(inGroup[0].key) }}
+                  >
+                    <span className="primary-tab-row">
+                      <span className="primary-tab-icon"><Icon size={18} /></span>
+                      <span className="primary-tab-label">{meta.label}</span>
+                      <span className="primary-tab-count">{total}</span>
+                    </span>
+                    <span className="primary-tab-hint">{meta.hint}</span>
+                  </button>
+                )
+              })}
             </div>
+
+            {subCats.length > 1 && (
+              <div className="sub-tabs">
+                {subCats.map(({ key, label, icon: Icon }) => (
+                  <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
+                    <Icon size={13} /> {label} <span>{counts[key]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="category-panel">
-              {cat === 'production' && (
-                <div className="form-card">
-                  <h2>Production volumes</h2>
-                  <p className="form-sub">Reporting-period volumes drive intensity metrics (kgCO2e/ADt pulp, t paper, t board).</p>
-                  <div className="field-row">
-                    <NumField label="Air-dry pulp (ADt)" unit="t" value={ad.production.airDryPulpTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.airDryPulpTonnes = v))} />
-                    <NumField label="Paper produced" unit="t" value={ad.production.paperProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.paperProducedTonnes = v))} />
-                    <NumField label="Board produced" unit="t" value={ad.production.boardProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.boardProducedTonnes = v))} />
-                  </div>
-                </div>
-              )}
               {cat === 'stationary' && <StationaryTable entries={ad.stationaryCombustion} trace={trace} onChange={(rows) => patch((d) => (d.activityData.stationaryCombustion = rows))} />}
               {cat === 'biomass' && <BiomassTable entries={ad.biomassCombustion} trace={trace} onChange={(rows) => patch((d) => (d.activityData.biomassCombustion = rows))} />}
               {cat === 'limeKiln' && <LimeKilnTable entries={ad.limeKilns} trace={trace} onChange={(rows) => patch((d) => (d.activityData.limeKilns = rows))} />}
@@ -1326,27 +1422,41 @@ export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               {cat === 'landfill' && <LandfillTable entries={ad.landfills} trace={trace} onChange={(rows) => patch((d) => (d.activityData.landfills = rows))} />}
               {cat === 'wwt' && <WwtTable entries={ad.anaerobicWwt} trace={trace} onChange={(rows) => patch((d) => (d.activityData.anaerobicWwt = rows))} />}
               {cat === 'refrigerant' && <RefrigerantTable entries={ad.refrigerants} trace={trace} onChange={(rows) => patch((d) => (d.activityData.refrigerants = rows))} />}
-              {cat === 'chp' && <ChpTable entries={ad.chpAllocation} trace={trace} onChange={(rows) => patch((d) => (d.activityData.chpAllocation = rows))} />}
-              {cat === 'transfer' && <TransferTable entries={ad.co2Transfers} trace={trace} onChange={(rows) => patch((d) => (d.activityData.co2Transfers = rows))} />}
-              {cat === 'reported' && (
-                <>
-                  <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
-                  <div className="form-card">
-                    <h2>Reconciliation against a disclosed total</h2>
-                    <p className="form-sub">Optional. If you have a published gross Scope 1 figure, enter it here. We flag a variance &gt;5%.</p>
-                    <div className="field-row">
-                      <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="from public disclosure" />
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
+
+            {allocCats.length > 0 && (
+              <div className="form-card">
+                <h2>CHP allocation + CO2 transfers <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-mute)', marginLeft: 8 }}>analytical only — does not change gross</span></h2>
+                <p className="form-sub">CHP allocation distributes heat/power emissions for reporting; CO2 transfers track fossil CO2 exported / imported (e.g. PCC plant). Neither modifies your Scope 1 total.</p>
+                {allocCats.map((c) => (
+                  <details key={c.key} style={{ marginTop: 10 }} open={cat === c.key}>
+                    <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>{c.label} <span style={{ background: 'rgba(0,0,0,0.08)', borderRadius: 999, fontSize: 11, fontWeight: 700, marginLeft: 6, minWidth: 22, padding: '1px 7px' }}>{counts[c.key]}</span></summary>
+                    <div style={{ marginTop: 10 }}>
+                      {c.key === 'chp' && <ChpTable entries={ad.chpAllocation} trace={trace} onChange={(rows) => patch((d) => (d.activityData.chpAllocation = rows))} />}
+                      {c.key === 'transfer' && <TransferTable entries={ad.co2Transfers} trace={trace} onChange={(rows) => patch((d) => (d.activityData.co2Transfers = rows))} />}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            )}
+
+            {p.sourceApplicability.reported !== false && (
+              <div className="form-card">
+                <h2>Reported / direct-entry + reconciliation</h2>
+                <p className="form-sub">For corporate-aggregate disclosure where line-item activity isn&apos;t available. Add reported rows, then enter the published Scope 1 figure to reconcile (we flag variance &gt;5%).</p>
+                <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
+                <div className="field-row" style={{ marginTop: 14 }}>
+                  <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="from public disclosure" />
+                </div>
+              </div>
+            )}
             <div className="step-footer">
               <button className="btn ghost" onClick={() => setStep(3)}>Back</button>
               <button className="btn primary" onClick={() => runCalculate(false)} disabled={busy}>{busy ? 'Calculating…' : 'Calculate Scope 1 →'}</button>
             </div>
           </section>
-        )}
+          )
+        })()}
 
         {step === 5 && result && (
           <section className="step-page active">

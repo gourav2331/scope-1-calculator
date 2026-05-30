@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
+  Atom,
   Factory,
   FileJson,
   FileSpreadsheet,
@@ -90,15 +91,33 @@ const FLARE_TYPES = [
 ]
 const PROCESS_TYPES = ['SMR_HYDROGEN', 'FCC_REGEN', 'AMINE_ACID_GAS', 'GENERIC_EF', 'DIRECT_CO2'] as const
 
-const CATEGORIES: { key: OgCat; label: string; icon: typeof Flame }[] = [
-  { key: 'stationary', label: 'Stationary', icon: Gauge },
-  { key: 'mobile', label: 'Mobile', icon: Truck },
-  { key: 'flaring', label: 'Flaring', icon: Flame },
-  { key: 'venting', label: 'Venting', icon: Wind },
-  { key: 'fugitive', label: 'Fugitive', icon: Activity },
-  { key: 'refrigerants', label: 'Refrigerants', icon: Snowflake },
-  { key: 'process', label: 'Process', icon: Factory },
-  { key: 'reported', label: 'Reported', icon: FileText },
+/** Canonical Scope 1 source-type taxonomy for O&G (GHG Protocol §4.1 + IPIECA/API guidance).
+ *  Flaring is a hybrid (combustion of a process gas) — IPIECA puts it in PROCESS for O&G,
+ *  while GHG Protocol puts pure stationary/mobile combustion separately. */
+type OGGroup = 'STATIONARY' | 'MOBILE' | 'PROCESS' | 'FUGITIVE' | 'REPORTED'
+
+type OGIconCmp = React.ComponentType<{ size?: number; strokeWidth?: number }>
+
+const OG_GROUP_LABELS: Record<OGGroup, { label: string; hint: string; icon: OGIconCmp }> = {
+  STATIONARY: { label: 'Stationary combustion', hint: 'engines · turbines · heaters · reboilers', icon: Gauge },
+  MOBILE:     { label: 'Mobile combustion', hint: 'fleet · marine · drilling rigs', icon: Truck },
+  PROCESS:    { label: 'Process emissions', hint: 'flaring · SMR · FCC regen · amine acid-gas · direct CO2', icon: Atom },
+  FUGITIVE:   { label: 'Fugitive emissions', hint: 'cold venting · LDAR · refrigerant leaks', icon: Wind },
+  REPORTED:   { label: 'Reported / direct-entry', hint: 'aggregate disclosure + reconciliation', icon: FileText },
+}
+
+const OG_PRIMARY_GROUPS: OGGroup[] = ['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE']
+const OG_GROUP_ORDER: OGGroup[] = ['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE', 'REPORTED']
+
+const CATEGORIES: { key: OgCat; label: string; icon: typeof Flame; group: OGGroup }[] = [
+  { key: 'stationary', label: 'Stationary', icon: Gauge, group: 'STATIONARY' },
+  { key: 'mobile', label: 'Mobile', icon: Truck, group: 'MOBILE' },
+  { key: 'flaring', label: 'Flaring', icon: Flame, group: 'PROCESS' },
+  { key: 'process', label: 'Process', icon: Factory, group: 'PROCESS' },
+  { key: 'venting', label: 'Venting', icon: Wind, group: 'FUGITIVE' },
+  { key: 'fugitive', label: 'Fugitive (LDAR)', icon: Activity, group: 'FUGITIVE' },
+  { key: 'refrigerants', label: 'Refrigerants', icon: Snowflake, group: 'FUGITIVE' },
+  { key: 'reported', label: 'Reported', icon: FileText, group: 'REPORTED' },
 ]
 
 const GWP_SETS: { key: OilGasGwpSet; label: string }[] = [
@@ -1238,7 +1257,7 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
         {step === 1 && (
           <section className="step-page active">
             <h1 className="step-title">What <em>sector</em> are you in?</h1>
-            <p className="step-sub">Oil &amp; Gas uses the IPIECA/API six-category taxonomy plus refrigerants. Gross Scope 1 is full CO2e (CO2 + CH4 + N2O), with methane front and centre.</p>
+            <p className="step-sub">Oil &amp; Gas uses the IPIECA/API six-category taxonomy plus refrigerants. Gross Scope 1 covers all four canonical source types — <b>stationary combustion</b> (engines, turbines, heaters), <b>mobile combustion</b>, <b>process emissions</b> (flaring, SMR, FCC, amine acid-gas), and <b>fugitive emissions</b> (cold venting, LDAR components, refrigerants) — as full CO2e (CO2 + CH4 + N2O), with methane front and centre.</p>
             {hasDraft && (
               <div
                 style={{ alignItems: 'center', background: 'color-mix(in srgb, #2f6b4f 10%, transparent)', border: '1px solid color-mix(in srgb, #2f6b4f 32%, transparent)', borderRadius: 12, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', margin: '14px 0 0', padding: '12px 16px' }}
@@ -1461,15 +1480,53 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
         {step === 4 && (
           <section className="step-page active">
             <h1 className="step-title">Activity <em>data</em></h1>
-            <p className="step-sub">Add sources by category. Every row shows its live CO2e, recalculated as you type. Switch categories with the tabs.</p>
+            <p className="step-sub">Pick a Scope 1 source type below — <b>stationary combustion</b>, <b>mobile combustion</b>, <b>process emissions</b>, or <b>fugitive emissions</b> — then drill into its sub-category. <b>Reported / direct-entry</b> (bottom) is for corporate-aggregate disclosure + reconciliation.</p>
             <LiveTotals live={live} />
-            <div className="category-tabs">
-              {CATEGORIES.map(({ key, label, icon: Icon }) => (
-                <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
-                  <Icon size={15} /> {label} <span>{counts[key]}</span>
-                </button>
-              ))}
-            </div>
+            {(() => {
+              const activeGroupOfCat = (CATEGORIES.find((c) => c.key === cat)?.group ?? 'STATIONARY') as OGGroup
+              const activeGroup: OGGroup = OG_PRIMARY_GROUPS.includes(activeGroupOfCat) ? activeGroupOfCat : 'STATIONARY'
+              const subCats = CATEGORIES.filter((c) => c.group === activeGroup)
+              if (subCats.length > 0 && !subCats.some((c) => c.key === cat)) {
+                setTimeout(() => setCat(subCats[0].key), 0)
+              }
+              return (
+                <>
+                  <div className="primary-tabs">
+                    {OG_PRIMARY_GROUPS.map((g) => {
+                      const inGroup = CATEGORIES.filter((c) => c.group === g)
+                      const total = inGroup.reduce((sum, c) => sum + (counts[c.key] || 0), 0)
+                      const meta = OG_GROUP_LABELS[g]
+                      const Icon = meta.icon
+                      const isActive = activeGroup === g
+                      return (
+                        <button
+                          key={g}
+                          type="button"
+                          className={`primary-tab ${isActive ? 'active' : ''}`}
+                          onClick={() => { if (inGroup[0]) setCat(inGroup[0].key) }}
+                        >
+                          <span className="primary-tab-row">
+                            <span className="primary-tab-icon"><Icon size={18} /></span>
+                            <span className="primary-tab-label">{meta.label}</span>
+                            <span className="primary-tab-count">{total}</span>
+                          </span>
+                          <span className="primary-tab-hint">{meta.hint}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {subCats.length > 1 && (
+                    <div className="sub-tabs">
+                      {subCats.map(({ key, label, icon: Icon }) => (
+                        <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
+                          <Icon size={13} /> {label} <span>{counts[key]}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
             <div className="category-panel">
               {cat === 'stationary' && <StationaryTable entries={ad.stationaryCombustion} trace={trace} method={p.methodSelections.stationaryCombustionMethod} onChange={(rows) => patch((d) => (d.activityData.stationaryCombustion = rows))} />}
               {cat === 'mobile' && <MobileTable entries={ad.mobileCombustion} trace={trace} method={p.methodSelections.mobileCombustionMethod} onChange={(rows) => patch((d) => (d.activityData.mobileCombustion = rows))} />}
@@ -1478,26 +1535,20 @@ export function OilGasWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
               {cat === 'fugitive' && <FugitiveTable entries={ad.fugitiveComponents} trace={trace} onChange={(rows) => patch((d) => (d.activityData.fugitiveComponents = rows))} />}
               {cat === 'refrigerants' && <RefrigerantTable entries={ad.refrigerants} trace={trace} onChange={(rows) => patch((d) => (d.activityData.refrigerants = rows))} />}
               {cat === 'process' && <ProcessTable entries={ad.process} trace={trace} onChange={(rows) => patch((d) => (d.activityData.process = rows))} />}
-              {cat === 'reported' && (
-                <>
-                  <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
-                  <div className="form-card">
-                    <h2>Reconciliation against disclosed figures</h2>
-                    <p className="form-sub">
-                      Optional. Enter any published figures (e.g. an annual report or 20-F). We compare each one against the modelled
-                      inventory and flag a variance above 5%. This does <b>not</b> change your result — it&apos;s an assurance check.
-                      <b> Tip:</b> if the disclosure splits CO2 and methane (most O&G companies do), enter them by gas below and enter
-                      your reported figure by gas too — gross can match while the gas mix is wrong.
-                    </p>
-                    <div className="field-row">
-                      <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="from public disclosure" />
-                      <NumField label="…or disclosed CO2" unit="tCO2" value={ad.disclosedScope1CO2Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CO2Tonnes = v))} />
-                      <NumField label="Disclosed CH4" unit="tCH4" value={ad.disclosedScope1CH4Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CH4Tonnes = v))} hint="mass, not CO2e" />
-                      <NumField label="Disclosed N2O" unit="tN2O" value={ad.disclosedScope1N2OTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1N2OTonnes = v))} />
-                    </div>
-                  </div>
-                </>
-              )}
+            </div>
+
+            <div className="form-card">
+              <h2>Reported / direct-entry + reconciliation</h2>
+              <p className="form-sub">
+                For corporate-aggregate disclosure (annual report, 20-F, BRSR) where line-item activity isn&apos;t available. Each disclosed figure reconciles independently against the modelled inventory; we flag variance &gt;5%. <b>Tip:</b> O&amp;G disclosures usually split CO2 and CH4 — enter them by gas (gross can match while the gas mix is wrong).
+              </p>
+              <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
+              <div className="field-row" style={{ marginTop: 14 }}>
+                <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="from public disclosure" />
+                <NumField label="…or disclosed CO2" unit="tCO2" value={ad.disclosedScope1CO2Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CO2Tonnes = v))} />
+                <NumField label="Disclosed CH4" unit="tCH4" value={ad.disclosedScope1CH4Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CH4Tonnes = v))} hint="mass, not CO2e" />
+                <NumField label="Disclosed N2O" unit="tN2O" value={ad.disclosedScope1N2OTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1N2OTonnes = v))} />
+              </div>
             </div>
             <div className="step-footer">
               <button className="btn ghost" onClick={() => setStep(3)}>Back</button>

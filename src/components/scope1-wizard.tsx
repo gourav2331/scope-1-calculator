@@ -619,7 +619,7 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
               What <em>sector</em> are you in?
             </h1>
             <p className="step-sub">
-              Cement is the first active methodology pack (CSI Cement CO2 Protocol). The engine is sector-extensible.
+              Cement is the first active methodology pack (CSI Cement CO2 Protocol). Gross Scope 1 covers all four canonical source types — <b>process emissions</b> (clinker calcination), <b>stationary combustion</b>, <b>mobile combustion</b>, and <b>fugitive emissions</b> — as full CO2e. The engine is sector-extensible.
             </p>
             {hasDraft && (
               <div

@@ -12,6 +12,8 @@
 
 import {
   AlertCircle,
+  Atom,
+  Boxes,
   CheckCircle2,
   Factory,
   FileText,
@@ -72,22 +74,48 @@ type Cat =
   | 'production' | 'stationary' | 'mobile' | 'cokeOven' | 'flaring' | 'sinter'
   | 'dri' | 'bfBof' | 'eaf' | 'limeKiln' | 'fugitiveHFC' | 'fugitiveSF6' | 'fugitiveOther' | 'reported'
 
-const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; appKey?: keyof IronSteelInputPayload['sourceApplicability'] }[] = [
-  { key: 'production', label: 'Production', icon: Factory },
-  { key: 'stationary', label: 'Stationary', icon: Flame, appKey: 'stationaryCombustion' },
-  { key: 'mobile', label: 'Mobile', icon: Truck, appKey: 'mobile' },
-  { key: 'cokeOven', label: 'Coke oven', icon: Hexagon, appKey: 'cokeOven' },
-  { key: 'flaring', label: 'Flaring', icon: Flame, appKey: 'flaring' },
-  { key: 'sinter', label: 'Sinter', icon: Recycle, appKey: 'sinter' },
-  { key: 'dri', label: 'DRI', icon: Fuel, appKey: 'dri' },
-  { key: 'bfBof', label: 'BF / BOF', icon: Factory, appKey: 'bfBof' },
-  { key: 'eaf', label: 'EAF', icon: Zap, appKey: 'eaf' },
-  { key: 'limeKiln', label: 'Lime kiln', icon: TreePine, appKey: 'limeKiln' },
-  { key: 'fugitiveHFC', label: 'HFCs', icon: Snowflake, appKey: 'fugitiveHFC' },
-  { key: 'fugitiveSF6', label: 'SF6', icon: Wind, appKey: 'fugitiveSF6' },
-  { key: 'fugitiveOther', label: 'Other CH4', icon: Wind, appKey: 'fugitiveOther' },
-  { key: 'reported', label: 'Reported', icon: FileText, appKey: 'reported' },
+/** Canonical Scope 1 source-type taxonomy (GHG Protocol §4.1).
+ *  Every I&S category maps to exactly one bucket so a verifier can see
+ *  source-type coverage at a glance. PRODUCTION + REPORTED aren't Scope 1
+ *  source types — they're meta (denominators / direct-entry). */
+type ISGroup = 'PRODUCTION' | 'STATIONARY' | 'MOBILE' | 'PROCESS' | 'FUGITIVE' | 'REPORTED'
+
+type IconCmp = React.ComponentType<{ size?: number; strokeWidth?: number }>
+
+const IS_GROUP_LABELS: Record<ISGroup, { label: string; hint: string; icon: IconCmp }> = {
+  PRODUCTION: { label: 'Production', hint: 'intensity denominators (not a Scope 1 source)', icon: Boxes },
+  STATIONARY: { label: 'Stationary combustion', hint: 'boilers · reheat · hot-blast stoves', icon: Flame },
+  MOBILE:     { label: 'Mobile combustion', hint: 'on-site fleet & equipment', icon: Truck },
+  PROCESS:    { label: 'Process emissions', hint: 'chemistry — coke / sinter / BF / BOF / DRI / EAF / lime / flaring', icon: Atom },
+  FUGITIVE:   { label: 'Fugitive emissions', hint: 'HFCs · SF6 · CH4 leaks', icon: Wind },
+  REPORTED:   { label: 'Reported / direct-entry', hint: 'aggregate disclosure + reconciliation', icon: FileText },
+}
+
+/** The four canonical Scope 1 source-type buckets that appear as the
+ *  primary horizontal tab row on Step 4. Production sits ABOVE this row
+ *  as a dedicated card (it's a denominator, not a source). Reported sits
+ *  BELOW this row as a dedicated card (it's a direct-entry mode + the
+ *  disclosure-reconciliation form). */
+const IS_PRIMARY_GROUPS: ISGroup[] = ['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE']
+
+const CATEGORIES: { key: Cat; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; appKey?: keyof IronSteelInputPayload['sourceApplicability']; group: ISGroup }[] = [
+  { key: 'production', label: 'Production', icon: Factory, group: 'PRODUCTION' },
+  { key: 'stationary', label: 'Stationary', icon: Flame, appKey: 'stationaryCombustion', group: 'STATIONARY' },
+  { key: 'mobile', label: 'Mobile', icon: Truck, appKey: 'mobile', group: 'MOBILE' },
+  { key: 'cokeOven', label: 'Coke oven', icon: Hexagon, appKey: 'cokeOven', group: 'PROCESS' },
+  { key: 'sinter', label: 'Sinter', icon: Recycle, appKey: 'sinter', group: 'PROCESS' },
+  { key: 'bfBof', label: 'BF / BOF', icon: Factory, appKey: 'bfBof', group: 'PROCESS' },
+  { key: 'dri', label: 'DRI', icon: Fuel, appKey: 'dri', group: 'PROCESS' },
+  { key: 'eaf', label: 'EAF', icon: Zap, appKey: 'eaf', group: 'PROCESS' },
+  { key: 'limeKiln', label: 'Lime kiln', icon: TreePine, appKey: 'limeKiln', group: 'PROCESS' },
+  { key: 'flaring', label: 'Flaring', icon: Flame, appKey: 'flaring', group: 'PROCESS' },
+  { key: 'fugitiveHFC', label: 'HFCs', icon: Snowflake, appKey: 'fugitiveHFC', group: 'FUGITIVE' },
+  { key: 'fugitiveSF6', label: 'SF6', icon: Wind, appKey: 'fugitiveSF6', group: 'FUGITIVE' },
+  { key: 'fugitiveOther', label: 'Other CH4', icon: Wind, appKey: 'fugitiveOther', group: 'FUGITIVE' },
+  { key: 'reported', label: 'Reported', icon: FileText, appKey: 'reported', group: 'REPORTED' },
 ]
+
+const IS_GROUP_ORDER: ISGroup[] = ['PRODUCTION', 'STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE', 'REPORTED']
 
 /** Route-driven applicability defaults per FRS §3 decision tree. */
 const ROUTE_APPLICABILITY: Record<IronSteelInputPayload['facility']['processRoute'], IronSteelInputPayload['sourceApplicability']> = {
@@ -101,7 +129,8 @@ const ROUTE_APPLICABILITY: Record<IronSteelInputPayload['facility']['processRout
   MIXED:        { stationaryCombustion: true, mobile: true, cokeOven: true, flaring: true, sinter: true, dri: true, bfBof: true, eaf: true, limeKiln: true, fugitiveHFC: true, fugitiveSF6: true, fugitiveOther: true, reported: true, purchasedElectricity: true },
 }
 
-const APPLICABILITY_LABELS: Record<keyof IronSteelInputPayload['sourceApplicability'], string> = {
+type AppKey = keyof IronSteelInputPayload['sourceApplicability']
+const APPLICABILITY_LABELS: Record<AppKey, string> = {
   stationaryCombustion: 'Stationary combustion (boilers, reheat / annealing furnaces, hot-blast stoves)',
   mobile: 'Mobile / on-site equipment (locomotives, haul trucks, forklifts)',
   cokeOven: 'Onsite coke production',
@@ -116,6 +145,36 @@ const APPLICABILITY_LABELS: Record<keyof IronSteelInputPayload['sourceApplicabil
   fugitiveOther: 'Other CH4 fugitives (coal stockpile, coke-oven seals, NG pipelines)',
   reported: 'Reported / direct-entry (corporate aggregate disclosure)',
   purchasedElectricity: 'Purchased electricity (supporting Scope 2)',
+}
+
+/** Maps each applicability checkbox to its canonical Scope 1 source-type bucket
+ *  (or 'SUPPORTING' for purchased electricity / 'REPORTED' for direct-entry).
+ *  Drives the grouped layout of the source-applicability card. */
+const APPLICABILITY_GROUPS: Record<AppKey, ISGroup | 'SUPPORTING'> = {
+  stationaryCombustion: 'STATIONARY',
+  mobile:               'MOBILE',
+  cokeOven:             'PROCESS',
+  sinter:               'PROCESS',
+  bfBof:                'PROCESS',
+  dri:                  'PROCESS',
+  eaf:                  'PROCESS',
+  limeKiln:             'PROCESS',
+  flaring:              'PROCESS',
+  fugitiveHFC:          'FUGITIVE',
+  fugitiveSF6:          'FUGITIVE',
+  fugitiveOther:        'FUGITIVE',
+  reported:             'REPORTED',
+  purchasedElectricity: 'SUPPORTING',
+}
+
+const APPLICABILITY_GROUP_HEADS: Record<ISGroup | 'SUPPORTING', string> = {
+  PRODUCTION: 'Production volumes',
+  STATIONARY: 'Stationary combustion — fuels burned at fixed sources',
+  MOBILE:     'Mobile combustion — on-site fleet / equipment',
+  PROCESS:    'Process emissions — chemistry (calcination, reduction, electrode oxidation, flaring)',
+  FUGITIVE:   'Fugitive emissions — leaks, vents, switchgear, CH4 from stockpiles',
+  REPORTED:   'Reported / direct-entry',
+  SUPPORTING: 'Supporting (Scope 2)',
 }
 
 /* ----------------------------- empty payload ----------------------------- */
@@ -845,7 +904,7 @@ const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel') => void }) {
   const [p, setP] = useState<IronSteelInputPayload>(emptyIronSteelPayload)
   const [step, setStep] = useState<number>(1)
-  const [cat, setCat] = useState<Cat>('production')
+  const [cat, setCat] = useState<Cat>('stationary')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<IronSteelCalculationResult | null>(null)
   const [live, setLive] = useState<IronSteelCalculationResult | null>(null)
@@ -1040,7 +1099,7 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
         {step === 1 && (
           <section className="step-page active">
             <h1 className="step-title">What <em>sector</em> are you in?</h1>
-            <p className="step-sub">Iron &amp; Steel uses the worldsteel + ISO 14404 site-level methodology with IPCC 2006 + 2019 Refinement Tier 1/2/3 EFs. Gross Scope 1 is full CO2e (CO2 + CH4 + N2O + HFCs + SF6); biogenic CO2 is a memo line.</p>
+            <p className="step-sub">Iron &amp; Steel uses the worldsteel + ISO 14404 site-level methodology with IPCC 2006 + 2019 Refinement Tier 1/2/3 EFs. Gross Scope 1 covers all four canonical source types — <b>stationary combustion</b>, <b>mobile combustion</b>, <b>process emissions</b> (coke / sinter / BF / BOF / EAF / DRI / lime kiln / flaring), and <b>fugitive emissions</b> (HFCs, SF6, CH4 leaks) — as full CO2e (CO2 + CH4 + N2O + HFCs + SF6). Biogenic CO2 is a memo line.</p>
             {hasDraft && (
               <div style={{ alignItems: 'center', background: 'color-mix(in srgb, #2f6b4f 10%, transparent)', border: '1px solid color-mix(in srgb, #2f6b4f 32%, transparent)', borderRadius: 12, display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', margin: '14px 0 0', padding: '12px 16px' }}>
                 <div><b>Draft restored.</b> <span style={{ color: 'var(--muted)' }}>Your previous entry was autosaved and reloaded.</span></div>
@@ -1212,53 +1271,103 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
           </section>
         )}
 
-        {step === 4 && (
+        {step === 4 && (() => {
+          // Derive active primary group from cat. If cat isn't in a primary
+          // group (e.g. stale 'production' or 'reported' from autosave),
+          // default to STATIONARY.
+          const activeGroupOfCat = (CATEGORIES.find((c) => c.key === cat)?.group ?? 'STATIONARY') as ISGroup
+          const activeGroup: ISGroup = IS_PRIMARY_GROUPS.includes(activeGroupOfCat) ? activeGroupOfCat : 'STATIONARY'
+          const subCats = CATEGORIES.filter((c) => c.group === activeGroup && (!c.appKey || p.sourceApplicability[c.appKey] !== false))
+          // If cat fell out of the active group (route toggled it off, or it's
+          // a meta cat like production), snap to the first valid sub-cat.
+          if (subCats.length > 0 && !subCats.some((c) => c.key === cat)) {
+            setTimeout(() => setCat(subCats[0].key), 0)
+          }
+          return (
           <section className="step-page active">
             <h1 className="step-title">Activity <em>data</em></h1>
-            <p className="step-sub">13 source categories plus reported. Leave a field blank for <b>missing</b>; type <b>0</b> for a confirmed zero. <em>Biogenic CO2 is never in gross Scope 1.</em></p>
+            <p className="step-sub">Pick a Scope 1 source type below — <b>stationary combustion</b>, <b>mobile combustion</b>, <b>process emissions</b>, or <b>fugitive emissions</b> — then drill into its sub-category. <b>Production volumes</b> (top) drive intensity, <b>Reported / direct-entry</b> (bottom) is for corporate-aggregate disclosure + reconciliation. Leave a field blank for <b>missing</b>; type <b>0</b> for a confirmed zero. <em>Biogenic CO2 is never in gross Scope 1.</em></p>
             <LiveTotals live={live} />
 
-            <div className="form-card">
-              <h2>Source applicability — what this plant operates</h2>
-              <p className="form-sub">
-                Auto-set from your <b>{p.facility.processRoute.toLowerCase().replace(/_/g, ' ')}</b> route per ISO 14404 + worldsteel. Toggle OFF any source this plant doesn&apos;t have to hide its tab. Source applicability is part of the audit trail.
+            <details className="form-card">
+              <summary style={{ cursor: 'pointer', fontWeight: 700, color: 'var(--ink)' }}>Source applicability — what this plant operates ({Object.values(p.sourceApplicability).filter(Boolean).length} of {Object.keys(p.sourceApplicability).length} sources active)</summary>
+              <p className="form-sub" style={{ marginTop: 8 }}>
+                Auto-set from your <b>{p.facility.processRoute.toLowerCase().replace(/_/g, ' ')}</b> route per ISO 14404 + worldsteel. Toggle OFF any source this plant doesn&apos;t have to hide its sub-tab. Source applicability is part of the audit trail.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px 16px', marginTop: 10 }}>
-                {(Object.entries(APPLICABILITY_LABELS) as [keyof IronSteelInputPayload['sourceApplicability'], string][]).map(([k, label]) => (
-                  <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
-                    <input type="checkbox" checked={!!p.sourceApplicability[k]} onChange={(e) => patch((d) => (d.sourceApplicability[k] = e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--purple)' }} />
-                    <span style={{ color: p.sourceApplicability[k] ? 'var(--ink)' : 'var(--ink-mute)' }}>{label}</span>
-                  </label>
-                ))}
+              {(['STATIONARY', 'MOBILE', 'PROCESS', 'FUGITIVE', 'REPORTED', 'SUPPORTING'] as const).map((group) => {
+                const keys = (Object.keys(APPLICABILITY_LABELS) as AppKey[]).filter((k) => APPLICABILITY_GROUPS[k] === group)
+                if (keys.length === 0) return null
+                return (
+                  <div key={group} className="applicability-group">
+                    <div className="applicability-group-head">{APPLICABILITY_GROUP_HEADS[group]}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '8px 16px' }}>
+                      {keys.map((k) => (
+                        <label key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--ink)' }}>
+                          <input type="checkbox" checked={!!p.sourceApplicability[k]} onChange={(e) => patch((d) => (d.sourceApplicability[k] = e.target.checked))} style={{ width: 16, height: 16, accentColor: 'var(--purple)' }} />
+                          <span style={{ color: p.sourceApplicability[k] ? 'var(--ink)' : 'var(--ink-mute)' }}>{APPLICABILITY_LABELS[k]}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </details>
+
+            <div className="form-card">
+              <h2>Production volumes</h2>
+              <p className="form-sub">Reporting-period volumes drive intensity metrics (kgCO2e per t crude steel / hot-rolled / hot metal). Not a Scope 1 source — these are the denominators.</p>
+              <div className="field-row">
+                <NumField label="Crude steel" unit="t" value={ad.production.crudeSteelTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.crudeSteelTonnes = v))} />
+                <NumField label="Hot metal (BF output)" unit="t" value={ad.production.hotMetalTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.hotMetalTonnes = v))} />
+                <NumField label="Hot-rolled" unit="t" value={ad.production.hotRolledTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.hotRolledTonnes = v))} />
+              </div>
+              <div className="field-row">
+                <NumField label="Sinter produced" unit="t" value={ad.production.sinterProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.sinterProducedTonnes = v))} />
+                <NumField label="Pellet produced" unit="t" value={ad.production.pelletProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.pelletProducedTonnes = v))} />
+                <NumField label="Coke produced" unit="t" value={ad.production.cokeProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.cokeProducedTonnes = v))} />
+                <NumField label="DRI produced" unit="t" value={ad.production.driProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.driProducedTonnes = v))} />
               </div>
             </div>
 
-            <div className="category-tabs">
-              {CATEGORIES.filter((c) => !c.appKey || p.sourceApplicability[c.appKey] !== false).map(({ key, label, icon: Icon }) => (
-                <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
-                  <Icon size={15} /> {label} <span>{counts[key]}</span>
-                </button>
-              ))}
+            <div className="primary-tabs">
+              {IS_PRIMARY_GROUPS.map((g) => {
+                const inGroup = CATEGORIES.filter((c) => c.group === g && (!c.appKey || p.sourceApplicability[c.appKey] !== false))
+                const total = inGroup.reduce((sum, c) => sum + (counts[c.key] || 0), 0)
+                const meta = IS_GROUP_LABELS[g]
+                const Icon = meta.icon
+                const isActive = activeGroup === g
+                const disabled = inGroup.length === 0
+                return (
+                  <button
+                    key={g}
+                    type="button"
+                    className={`primary-tab ${isActive ? 'active' : ''}`}
+                    disabled={disabled}
+                    style={disabled ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                    onClick={() => { if (inGroup[0]) setCat(inGroup[0].key) }}
+                  >
+                    <span className="primary-tab-row">
+                      <span className="primary-tab-icon"><Icon size={18} /></span>
+                      <span className="primary-tab-label">{meta.label}</span>
+                      <span className="primary-tab-count">{total}</span>
+                    </span>
+                    <span className="primary-tab-hint">{meta.hint}</span>
+                  </button>
+                )
+              })}
             </div>
 
+            {subCats.length > 1 && (
+              <div className="sub-tabs">
+                {subCats.map(({ key, label, icon: Icon }) => (
+                  <button key={key} className={cat === key ? 'active' : ''} onClick={() => setCat(key)}>
+                    <Icon size={13} /> {label} <span>{counts[key]}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="category-panel">
-              {cat === 'production' && (
-                <div className="form-card">
-                  <h2>Production volumes</h2>
-                  <p className="form-sub">Reporting-period volumes drive intensity metrics (kgCO2e per t crude steel / hot-rolled / hot metal).</p>
-                  <div className="field-row">
-                    <NumField label="Crude steel" unit="t" value={ad.production.crudeSteelTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.crudeSteelTonnes = v))} />
-                    <NumField label="Hot metal (BF output)" unit="t" value={ad.production.hotMetalTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.hotMetalTonnes = v))} />
-                    <NumField label="Hot-rolled" unit="t" value={ad.production.hotRolledTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.hotRolledTonnes = v))} />
-                  </div>
-                  <div className="field-row">
-                    <NumField label="Sinter produced" unit="t" value={ad.production.sinterProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.sinterProducedTonnes = v))} />
-                    <NumField label="Pellet produced" unit="t" value={ad.production.pelletProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.pelletProducedTonnes = v))} />
-                    <NumField label="Coke produced" unit="t" value={ad.production.cokeProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.cokeProducedTonnes = v))} />
-                    <NumField label="DRI produced" unit="t" value={ad.production.driProducedTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.production.driProducedTonnes = v))} />
-                  </div>
-                </div>
-              )}
               {cat === 'stationary' && <StationaryTable entries={ad.stationaryCombustion} trace={trace} onChange={(rows) => patch((d) => (d.activityData.stationaryCombustion = rows))} />}
               {cat === 'mobile' && <MobileTable entries={ad.mobile} trace={trace} onChange={(rows) => patch((d) => (d.activityData.mobile = rows))} />}
               {cat === 'cokeOven' && <CokeOvenTable entries={ad.cokeOven} trace={trace} onChange={(rows) => patch((d) => (d.activityData.cokeOven = rows))} />}
@@ -1271,88 +1380,88 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
               {cat === 'fugitiveHFC' && <HfcTable entries={ad.fugitiveHFC} trace={trace} onChange={(rows) => patch((d) => (d.activityData.fugitiveHFC = rows))} />}
               {cat === 'fugitiveSF6' && <Sf6Table entries={ad.fugitiveSF6} trace={trace} onChange={(rows) => patch((d) => (d.activityData.fugitiveSF6 = rows))} />}
               {cat === 'fugitiveOther' && <OtherFugitiveTable entries={ad.fugitiveOther} trace={trace} onChange={(rows) => patch((d) => (d.activityData.fugitiveOther = rows))} />}
-              {cat === 'reported' && (
-                <>
-                  <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
-                  <div className="form-card">
-                    <h2>Reconciliation against a disclosed total</h2>
-                    <p className="form-sub">For audit defensibility, enter (a) what boundary the public number describes, (b) the gross Scope 1 figure and — where available — its per-gas split, supporting Scope 2, and intensity. We reconcile each line independently and flag variance &gt;5%.</p>
-
-                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Boundary &amp; provenance</h3>
-                    <div className="field-row">
-                      <label className="field">Boundary basis
-                        <select
-                          value={p.disclosure?.boundaryBasis ?? ''}
-                          onChange={(ev) => {
-                            const v = ev.target.value as DisclosureBoundaryBasis | ''
-                            patch((d) => {
-                              d.disclosure = { ...(d.disclosure ?? {}), boundaryBasis: v === '' ? undefined : v }
-                            })
-                          }}
-                        >
-                          <option value="">— select —</option>
-                          <option value="STEELMAKING_SITES_ONLY">Steelmaking sites only (worldsteel / ISO 14404)</option>
-                          <option value="ALL_SITES">All sites (corporate aggregate inc. non-steelmaking)</option>
-                          <option value="WSA_SCOPE_1_PLUS_1A">worldsteel Scope 1 + 1A (purchased intermediates)</option>
-                          <option value="BRSR_BOUNDARY">BRSR boundary (India SEBI)</option>
-                          <option value="EU_ETS">EU ETS (Annex I installation)</option>
-                          <option value="CBAM">CBAM (Annex II direct embedded)</option>
-                          <option value="CORPORATE_AGGREGATE">Corporate aggregate (catch-all)</option>
-                          <option value="OTHER">Other — explain in note</option>
-                        </select>
-                        <small className="form-sub" style={{ marginTop: 4 }}>Required when reported entries are material (≥10% of gross). Picks the lens the disclosed numbers were measured under.</small>
-                      </label>
-                      <label className="field">Public report URL
-                        <input
-                          value={p.disclosure?.publicReportUrl ?? ''}
-                          placeholder="https://… (annual report, BRSR, ETS verified statement)"
-                          onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportUrl: ev.target.value } })}
-                        />
-                      </label>
-                      <label className="field">Page / section reference
-                        <input
-                          value={p.disclosure?.publicReportPageReference ?? ''}
-                          placeholder="e.g. BRSR Section A.III.E, p. 142"
-                          onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportPageReference: ev.target.value } })}
-                        />
-                      </label>
-                    </div>
-                    {p.disclosure?.boundaryBasis === 'OTHER' && (
-                      <div className="field-row">
-                        <label className="field" style={{ gridColumn: 'span 3' }}>Boundary note (required when basis = Other)
-                          <input
-                            value={p.disclosure?.boundaryNote ?? ''}
-                            placeholder="e.g. group-level boundary minus joint ventures; mining excluded; downstream rolling included"
-                            onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), boundaryNote: ev.target.value } })}
-                          />
-                        </label>
-                      </div>
-                    )}
-
-                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Disclosed gross figures</h3>
-                    <div className="field-row">
-                      <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="top-line gross from disclosure" />
-                      <NumField label="Disclosed Scope 2" unit="tCO2e" value={ad.disclosedScope2CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope2CO2eTonnes = v))} hint="location-based, for supporting recon" />
-                      <NumField label="Disclosed intensity" unit="kgCO2e / t crude steel" value={ad.disclosedIntensityKgPerTcrudeSteel ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedIntensityKgPerTcrudeSteel = v))} hint="the canonical steel KPI — often the headline" />
-                    </div>
-
-                    <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>By-gas split (optional)</h3>
-                    <p className="form-sub">If the disclosure breaks gross into CO2 / CH4 / N2O masses (common in BRSR Section A.III, ETS verified statements, worldsteel returns), enter them — each gas reconciles independently.</p>
-                    <div className="field-row">
-                      <NumField label="Disclosed CO2" unit="tCO2" value={ad.disclosedScope1CO2Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CO2Tonnes = v))} />
-                      <NumField label="Disclosed CH4" unit="t CH4 (mass)" value={ad.disclosedScope1CH4Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CH4Tonnes = v))} hint="enter mass, not CO2e" />
-                      <NumField label="Disclosed N2O" unit="t N2O (mass)" value={ad.disclosedScope1N2OTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1N2OTonnes = v))} hint="enter mass, not CO2e" />
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
+
+            {p.sourceApplicability.reported !== false && (
+              <div className="form-card">
+                <h2>Reported / direct-entry + reconciliation</h2>
+                <p className="form-sub">For corporate-aggregate disclosure where line-item activity isn&apos;t available. Add reported rows here, then enter the public-disclosure boundary basis + figures below — each disclosed metric reconciles independently and we flag variance &gt;5%.</p>
+                <ReportedTable entries={ad.reported} trace={trace} onChange={(rows) => patch((d) => (d.activityData.reported = rows))} />
+
+                <h3 style={{ marginTop: 18, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Boundary &amp; provenance</h3>
+                <div className="field-row">
+                  <label className="field">Boundary basis
+                    <select
+                      value={p.disclosure?.boundaryBasis ?? ''}
+                      onChange={(ev) => {
+                        const v = ev.target.value as DisclosureBoundaryBasis | ''
+                        patch((d) => {
+                          d.disclosure = { ...(d.disclosure ?? {}), boundaryBasis: v === '' ? undefined : v }
+                        })
+                      }}
+                    >
+                      <option value="">— select —</option>
+                      <option value="STEELMAKING_SITES_ONLY">Steelmaking sites only (worldsteel / ISO 14404)</option>
+                      <option value="ALL_SITES">All sites (corporate aggregate inc. non-steelmaking)</option>
+                      <option value="WSA_SCOPE_1_PLUS_1A">worldsteel Scope 1 + 1A (purchased intermediates)</option>
+                      <option value="BRSR_BOUNDARY">BRSR boundary (India SEBI)</option>
+                      <option value="EU_ETS">EU ETS (Annex I installation)</option>
+                      <option value="CBAM">CBAM (Annex II direct embedded)</option>
+                      <option value="CORPORATE_AGGREGATE">Corporate aggregate (catch-all)</option>
+                      <option value="OTHER">Other — explain in note</option>
+                    </select>
+                    <small className="form-sub" style={{ marginTop: 4 }}>Required when reported entries are material (≥10% of gross).</small>
+                  </label>
+                  <label className="field">Public report URL
+                    <input
+                      value={p.disclosure?.publicReportUrl ?? ''}
+                      placeholder="https://… (annual report, BRSR, ETS verified statement)"
+                      onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportUrl: ev.target.value } })}
+                    />
+                  </label>
+                  <label className="field">Page / section reference
+                    <input
+                      value={p.disclosure?.publicReportPageReference ?? ''}
+                      placeholder="e.g. BRSR Section A.III.E, p. 142"
+                      onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), publicReportPageReference: ev.target.value } })}
+                    />
+                  </label>
+                </div>
+                {p.disclosure?.boundaryBasis === 'OTHER' && (
+                  <div className="field-row">
+                    <label className="field" style={{ gridColumn: 'span 3' }}>Boundary note (required when basis = Other)
+                      <input
+                        value={p.disclosure?.boundaryNote ?? ''}
+                        placeholder="e.g. group-level boundary minus joint ventures; mining excluded; downstream rolling included"
+                        onChange={(ev) => patch((d) => { d.disclosure = { ...(d.disclosure ?? {}), boundaryNote: ev.target.value } })}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>Disclosed gross figures</h3>
+                <div className="field-row">
+                  <NumField label="Disclosed gross Scope 1" unit="tCO2e" value={ad.disclosedGrossScope1CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedGrossScope1CO2eTonnes = v))} hint="top-line gross from disclosure" />
+                  <NumField label="Disclosed Scope 2" unit="tCO2e" value={ad.disclosedScope2CO2eTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope2CO2eTonnes = v))} hint="location-based, for supporting recon" />
+                  <NumField label="Disclosed intensity" unit="kgCO2e / t crude steel" value={ad.disclosedIntensityKgPerTcrudeSteel ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedIntensityKgPerTcrudeSteel = v))} hint="the canonical steel KPI — often the headline" />
+                </div>
+
+                <h3 style={{ marginTop: 14, marginBottom: 4, fontSize: 14, fontWeight: 700, color: 'var(--ink-mute)' }}>By-gas split (optional)</h3>
+                <p className="form-sub">If the disclosure breaks gross into CO2 / CH4 / N2O masses (common in BRSR Section A.III, ETS verified statements, worldsteel returns), enter them — each gas reconciles independently.</p>
+                <div className="field-row">
+                  <NumField label="Disclosed CO2" unit="tCO2" value={ad.disclosedScope1CO2Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CO2Tonnes = v))} />
+                  <NumField label="Disclosed CH4" unit="t CH4 (mass)" value={ad.disclosedScope1CH4Tonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1CH4Tonnes = v))} hint="enter mass, not CO2e" />
+                  <NumField label="Disclosed N2O" unit="t N2O (mass)" value={ad.disclosedScope1N2OTonnes ?? null} onChange={(v) => patch((d) => (d.activityData.disclosedScope1N2OTonnes = v))} hint="enter mass, not CO2e" />
+                </div>
+              </div>
+            )}
             <div className="step-footer">
               <button className="btn ghost" onClick={() => setStep(3)}>Back</button>
               <button className="btn primary" onClick={() => runCalculate(false)} disabled={busy}>{busy ? 'Calculating…' : 'Calculate Scope 1 →'}</button>
             </div>
           </section>
-        )}
+          )
+        })()}
 
         {step === 5 && result && (
           <section className="step-page active">
