@@ -911,27 +911,60 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                           'ckd',
                           'rawMealToc',
                         ]
+                        // Clear any prior facility-type-driven reasons before re-applying.
+                        for (const key of Object.keys(reasons)) {
+                          if (
+                            reasons[key] === 'Grinding unit has no kiln' ||
+                            reasons[key] === 'Clinker unit does not produce cement'
+                          ) {
+                            delete reasons[key]
+                          }
+                        }
                         if (next === 'GRINDING_UNIT') {
+                          // No kiln on site — calcination / dust / TOC all NA. Bought
+                          // clinker is the upstream Scope 3 input.
                           for (const s of kilnSources) {
                             d.sourceApplicability[s] = false as never
                             reasons[s as string] = 'Grinding unit has no kiln'
                           }
-                        } else {
+                          // Clear any phantom clinker input the user might have
+                          // typed while INTEGRATED was selected.
+                          d.activityData.production.clinkerProducedTonnes = null
+                          d.activityData.clinkerChemistry = {
+                            caoPercent: null, caoNonCarbonatePercent: null,
+                            mgoPercent: null, mgoNonCarbonatePercent: null,
+                          }
+                        } else if (next === 'CLINKER_UNIT') {
+                          // Kiln-only — keep kiln sources enabled, but no cement
+                          // or cementitious output (they sell clinker).
                           for (const s of kilnSources) {
                             d.sourceApplicability[s] = true as never
-                            if (reasons[s as string] === 'Grinding unit has no kiln') {
-                              delete reasons[s as string]
-                            }
+                          }
+                          d.activityData.production.cementProducedTonnes = null
+                          d.activityData.production.cementitiousProductTonnes = null
+                          reasons['cementProducedTonnes' as string] = 'Clinker unit does not produce cement'
+                          reasons['cementitiousProductTonnes' as string] = 'Clinker unit does not produce cement'
+                        } else {
+                          // INTEGRATED_CEMENT — everything on.
+                          for (const s of kilnSources) {
+                            d.sourceApplicability[s] = true as never
                           }
                         }
                         d.sourceApplicability.exclusionReasons = reasons
                       })
                     }
                   >
-                    <option value="INTEGRATED_CEMENT">Integrated cement plant</option>
-                    <option value="CLINKER_UNIT">Clinker unit</option>
-                    <option value="GRINDING_UNIT">Grinding unit</option>
+                    <option value="INTEGRATED_CEMENT">Integrated cement plant (kiln + mill)</option>
+                    <option value="CLINKER_UNIT">Clinker unit (kiln only — sells clinker)</option>
+                    <option value="GRINDING_UNIT">Grinding unit (mill only — buys clinker)</option>
                   </select>
+                  <small className="form-sub" style={{ marginTop: 4 }}>
+                    {p.facility.facilityType === 'GRINDING_UNIT'
+                      ? 'No kiln — clinker calcination CO₂ = 0. Bought clinker emissions are Scope 3 (upstream).'
+                      : p.facility.facilityType === 'CLINKER_UNIT'
+                        ? 'Kiln only — enter clinker produced. Sold clinker is Scope 1 here; the buyer reports it as Scope 3.'
+                        : 'Integrated — calcines clinker AND grinds cement. Enter all three production volumes.'}
+                  </small>
                 </label>
                 <label className="field">
                   Facility state / region
@@ -1085,13 +1118,24 @@ export function Scope1Wizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement'
                   <div className="form-card">
                     <h2>Production</h2>
                     <p className="form-sub">
-                      Reporting-period volumes drive gross Scope 1 (clinker calcination) and the intensity metrics
-                      (kgCO2 / t clinker, t cementitious). Leave a field blank if it doesn&apos;t apply.
+                      {p.facility.facilityType === 'GRINDING_UNIT' ? (
+                        <>Grinding unit — no kiln, so clinker calcination CO₂ is 0. Enter <b>cement</b> and <b>cementitious</b> for intensity metrics. Bought clinker is Scope 3 (upstream), not in gross Scope 1.</>
+                      ) : p.facility.facilityType === 'CLINKER_UNIT' ? (
+                        <>Clinker unit — kiln only, sells clinker. Enter <b>clinker produced</b>; cement / cementitious don&apos;t apply.</>
+                      ) : (
+                        <>Integrated cement plant — kiln + mill. Reporting-period volumes drive gross Scope 1 (clinker calcination) and intensity (kgCO₂ / t clinker, t cementitious).</>
+                      )}
                     </p>
                     <div className="field-row">
-                      <NumField label="Clinker produced" unit="t" value={ad.production.clinkerProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.clinkerProducedTonnes = v))} />
-                      <NumField label="Cement produced" unit="t" value={ad.production.cementProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.cementProducedTonnes = v))} />
-                      <NumField label="Cementitious product" unit="t" value={ad.production.cementitiousProductTonnes} onChange={(v) => patch((d) => (d.activityData.production.cementitiousProductTonnes = v))} />
+                      {p.facility.facilityType !== 'GRINDING_UNIT' && (
+                        <NumField label="Clinker produced" unit="t" value={ad.production.clinkerProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.clinkerProducedTonnes = v))} />
+                      )}
+                      {p.facility.facilityType !== 'CLINKER_UNIT' && (
+                        <NumField label="Cement produced" unit="t" value={ad.production.cementProducedTonnes} onChange={(v) => patch((d) => (d.activityData.production.cementProducedTonnes = v))} />
+                      )}
+                      {p.facility.facilityType !== 'CLINKER_UNIT' && (
+                        <NumField label="Cementitious product" unit="t" value={ad.production.cementitiousProductTonnes} onChange={(v) => patch((d) => (d.activityData.production.cementitiousProductTonnes = v))} />
+                      )}
                     </div>
                   </div>
 
