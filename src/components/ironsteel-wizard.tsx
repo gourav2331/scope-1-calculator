@@ -901,7 +901,7 @@ function LiveTotals({ live }: { live: IronSteelCalculationResult | null }) {
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel') => void }) {
+export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel' | 'power') => void }) {
   const [p, setP] = useState<IronSteelInputPayload>(emptyIronSteelPayload)
   const [step, setStep] = useState<number>(1)
   const [cat, setCat] = useState<Cat>('stationary')
@@ -1132,7 +1132,11 @@ export function IronSteelWizard({ onSwitchSector }: { onSwitchSector?: (s: 'ceme
                 <span className="icon"><Factory size={22} strokeWidth={1.75} /></span>
                 <strong>Iron &amp; Steel</strong><small>BF-BOF · EAF · DRI-EAF</small><span className="tags">worldsteel / ISO 14404 · active</span>
               </button>
-              {['Power','Chemicals','Textile','Pharma','General Mfg'].map((x) => (
+              <button className="sector-card" onClick={() => onSwitchSector?.('power')}>
+                <span className="icon"><Zap size={22} strokeWidth={1.75} /></span>
+                <strong>Power</strong><small>Coal · gas · oil · biomass · CHP</small><span className="tags">GHG Protocol / IPCC / EU ETS / CEA · active</span>
+              </button>
+              {['Chemicals','Textile','Pharma','General Mfg'].map((x) => (
                 <button className="sector-card muted" key={x} disabled>
                   <span className="icon"><Hexagon size={22} strokeWidth={1.75} /></span>
                   <strong>{x}</strong><small>Future sector pack</small><span className="tags">Planned</span>

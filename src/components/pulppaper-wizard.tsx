@@ -874,7 +874,7 @@ function LiveTotals({ live }: { live: PulpPaperCalculationResult | null }) {
 
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel') => void }) {
+export function PulpPaperWizard({ onSwitchSector }: { onSwitchSector?: (s: 'cement' | 'oil_gas' | 'pulp_paper' | 'iron_steel' | 'power') => void }) {
   const [p, setP] = useState<PulpPaperInputPayload>(emptyPulpPaperPayload)
   const [step, setStep] = useState<number>(1)
   const [cat, setCat] = useState<Cat>('stationary')
