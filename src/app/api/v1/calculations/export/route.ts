@@ -18,7 +18,16 @@ export async function POST(req: Request) {
   if (!payload) return NextResponse.json({ error: 'Missing payload' }, { status: 400 })
 
   const result = calculate(payload)
-  const base = `scope1-${(payload.facility?.name ?? 'facility').replace(/\s+/g, '_')}-FY${result.reportingPeriod.year}`
+  // Strip non-ASCII characters from the filename — Content-Disposition headers
+  // must be ASCII-only (bytes 0-255). Em-dash, smart quotes, accented chars
+  // in facility names would otherwise crash the response with
+  // "Cannot convert argument to a ByteString because the character ... is
+  // greater than 255."
+  const safeName = (payload.facility?.name ?? 'facility')
+    .replace(/[^\x20-\x7E]/g, '_')   // non-printable-ASCII → '_'
+    .replace(/[\\/:*?"<>|]/g, '_')   // reserved filesystem chars → '_'
+    .replace(/\s+/g, '_')
+  const base = `scope1-${safeName}-FY${result.reportingPeriod.year}`
 
   if (format === 'json') {
     return new NextResponse(JSON.stringify({ inputPayload: payload, result }, null, 2), {

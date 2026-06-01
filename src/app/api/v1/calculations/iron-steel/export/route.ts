@@ -18,7 +18,15 @@ export async function POST(req: Request) {
   if (!payload) return NextResponse.json({ error: 'Missing payload' }, { status: 400 })
 
   const result = calculateIronSteel(payload)
-  const base = `scope1-ironsteel-${(payload.facility?.name ?? 'plant').replace(/\s+/g, '_')}-FY${result.reportingPeriod.year}`
+  // Strip non-ASCII characters from the filename — Content-Disposition
+  // headers must be ASCII-only (bytes 0-255). Em-dash / smart quotes /
+  // accented chars in facility names would otherwise crash with
+  // "Cannot convert argument to a ByteString...".
+  const safeName = (payload.facility?.name ?? 'plant')
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+  const base = `scope1-ironsteel-${safeName}-FY${result.reportingPeriod.year}`
 
   if (format === 'json') {
     return new NextResponse(JSON.stringify({ inputPayload: payload, result }, null, 2), {
