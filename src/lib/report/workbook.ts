@@ -40,7 +40,7 @@ export function cementMethodology(payload: InputPayload, result: CalculationResu
     exclusions: [
       'Gross Scope 1 is CO2-only per the CSI protocol; combustion CH4/N2O is computed but reported as a separate non-CSI addendum, never inside gross Scope 1.',
       'Biomass/biogenic CO2 is a memo item, excluded from gross Scope 1 (its CH4/N2O remain in the addendum).',
-      'Purchased electricity is supporting Scope 2; bought (net external) clinker is supporting Scope 3 — neither is in gross Scope 1.',
+      'Purchased electricity (Scope 2) and bought clinker (Scope 3) are NOT collected by this calculator. The user should disclose them separately under BRSR / CDP / ESRS E1 using a dedicated Scope 2 + Scope 3 workflow.',
     ],
     notes: [result.nonCsiCombustionGhg.note],
   }
@@ -78,9 +78,13 @@ export async function buildWorkbook(payload: InputPayload, result: CalculationRe
     ['  Fugitive emissions', c.fugitiveCO2eTonnes, 'tCO2e'],
     ['Biomass CO2 (memo, excluded)', result.memoItems.biomassCO2Tonnes, 'tCO2'],
     ['Non-CSI combustion CH4/N2O (separate)', result.nonCsiCombustionGhg.ch4N2oCO2eTonnes, 'tCO2e'],
-    ['Supporting Scope 2 (electricity)', result.supportingScope2.purchasedElectricityCO2Tonnes, 'tCO2'],
-    ['Supporting Scope 3 (bought clinker)', result.supportingScope3.boughtClinkerCO2Tonnes, 'tCO2'],
-    ['Net CO2 (optional)', result.optionalNetReporting.netCO2Tonnes ?? 'n/a', 'tCO2'],
+    // Supporting Scope 2 (purchased electricity), Supporting Scope 3 (bought
+    // clinker), and Optional Net CO2 (acquired emission rights) are NOT
+    // published here — the wizard does not currently collect their inputs
+    // (MWh / external clinker bought-sold / emission rights acquired).
+    // Engine pathways remain; re-enable these lines if the wizard gains the
+    // inputs. The methodology note (cementMethodology.exclusions) still
+    // explains why they sit OUT of gross Scope 1.
     ['Intensity per t clinker', result.intensityMetrics.grossCO2PerTonneClinker ?? 'n/a', 'kgCO2/t'],
     ['Intensity per t cementitious', result.intensityMetrics.grossCO2PerTonneCementitious ?? 'n/a', 'kgCO2/t'],
     ['Data quality', result.dataQuality.overall, ''],

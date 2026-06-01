@@ -74,21 +74,14 @@ function ReportDoc({ payload, result }: { payload: InputPayload; result: Calcula
           value={n(result.nonCsiCombustionGhg.ch4N2oCO2eTonnes)}
           unit="tCO2e"
         />
-        <Line
-          label="Supporting Scope 2 — purchased electricity"
-          value={n(result.supportingScope2.purchasedElectricityCO2Tonnes)}
-          unit="tCO2"
-        />
-        <Line
-          label="Supporting Scope 3 — bought clinker"
-          value={n(result.supportingScope3.boughtClinkerCO2Tonnes)}
-          unit="tCO2"
-        />
-        <Line
-          label={`Optional net CO2 (${result.optionalNetReporting.method})`}
-          value={n(result.optionalNetReporting.netCO2Tonnes)}
-          unit="tCO2"
-        />
+        {/*
+         * Supporting Scope 2 (purchased electricity), Supporting Scope 3 (bought
+         * clinker), and Optional Net CO2 (acquired emission rights) lines are
+         * intentionally NOT printed — the wizard does not currently collect
+         * their inputs. Engine pathways remain; re-enable these lines when
+         * the wizard gains MWh / external clinker / emission-rights inputs.
+         * The methodology page still explains why they sit OUT of gross.
+         */}
         <Text style={s.note}>{result.nonCsiCombustionGhg.note}</Text>
 
         <Text style={s.section}>Intensity</Text>
